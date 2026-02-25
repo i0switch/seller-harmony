@@ -47,6 +47,28 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        platform: {
+          DEFAULT: "hsl(var(--platform-bg))",
+          foreground: "hsl(var(--platform-fg))",
+          accent: "hsl(var(--platform-accent))",
+          muted: "hsl(var(--platform-muted))",
+        },
+        seller: {
+          DEFAULT: "hsl(var(--seller-bg))",
+          foreground: "hsl(var(--seller-fg))",
+        },
+        buyer: {
+          DEFAULT: "hsl(var(--buyer-bg))",
+          foreground: "hsl(var(--buyer-fg))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
