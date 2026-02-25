@@ -1,25 +1,39 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { CheckCircle } from "lucide-react";
+import { OnboardingShell } from "@/components/OnboardingStepIndicator";
+import { useSellerAuth } from "@/hooks/useSellerAuth";
 
 export default function OnboardingComplete() {
   const navigate = useNavigate();
+  const { completeOnboarding } = useSellerAuth();
+
+  const handleGoToDashboard = () => {
+    completeOnboarding();
+    navigate("/seller/dashboard");
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md glass-card rounded-xl p-6 space-y-6 text-center">
-        <div>
-          <p className="text-xs text-accent font-medium">ステップ 4 / 4</p>
-          <CheckCircle className="h-16 w-16 mx-auto text-success mt-4" />
-          <h1 className="text-xl font-bold mt-4">セットアップ完了！</h1>
-          <p className="text-sm text-muted-foreground mt-2">
-            ファンクラブの準備が整いました。ダッシュボードからプランを作成して販売を始めましょう。
-          </p>
+    <OnboardingShell step={3}>
+      <div className="text-center space-y-4 py-4">
+        <CheckCircle className="h-16 w-16 mx-auto text-success" />
+        <h1 className="text-xl font-bold">セットアップ完了！</h1>
+        <p className="text-sm text-muted-foreground">
+          ファンクラブの準備が整いました。<br />
+          ダッシュボードからプランを作成して販売を始めましょう。
+        </p>
+        <div className="glass-card rounded-lg p-4 text-left text-sm space-y-2">
+          <p className="font-medium">次のステップ：</p>
+          <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+            <li>プランを作成する</li>
+            <li>決済リンクを共有する</li>
+            <li>会員の自動管理が始まります</li>
+          </ul>
         </div>
-        <Button onClick={() => navigate("/seller/dashboard")} className="w-full">
-          ダッシュボードへ
-        </Button>
       </div>
-    </div>
+      <Button onClick={handleGoToDashboard} className="w-full" size="lg">
+        ダッシュボードへ
+      </Button>
+    </OnboardingShell>
   );
 }
