@@ -1,17 +1,17 @@
 import { useState } from "react";
-import { mockKillSwitches, formatDateTimeJP } from "@/lib/mockData";
+import { formatDateTimeJP } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Shield, AlertTriangle } from "lucide-react";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/shared";
+import { useToast } from "@/hooks/use-toast";
+import { mockKillSwitches } from "@/lib/mockData";
 
 export default function PlatformSystemControl() {
   const [switches, setSwitches] = useState(mockKillSwitches.map((k) => ({ ...k })));
   const [confirmIdx, setConfirmIdx] = useState<number | null>(null);
   const [pendingValue, setPendingValue] = useState(false);
+  const { toast } = useToast();
 
   const handleToggle = (idx: number, newVal: boolean) => {
     setConfirmIdx(idx);
@@ -20,11 +20,17 @@ export default function PlatformSystemControl() {
 
   const confirmToggle = () => {
     if (confirmIdx === null) return;
+    const name = switches[confirmIdx].name;
     setSwitches((prev) =>
       prev.map((s, i) =>
         i === confirmIdx ? { ...s, enabled: pendingValue, lastChangedAt: new Date().toISOString(), lastChangedBy: "admin@platform.com" } : s
       )
     );
+    toast({
+      title: pendingValue ? "⚠️ 自動処理を停止しました" : "✅ 自動処理を再開しました",
+      description: `${name} を${pendingValue ? "停止" : "再開"}しました`,
+      variant: pendingValue ? "destructive" : "default",
+    });
     setConfirmIdx(null);
   };
 
@@ -37,7 +43,6 @@ export default function PlatformSystemControl() {
         <h2 className="text-2xl font-bold">システム制御（Kill Switch）</h2>
       </div>
 
-      {/* Status Summary */}
       <div className={`rounded-xl p-4 flex items-center gap-3 ${activeCount > 0 ? "bg-destructive/10 border border-destructive/30" : "glass-card"}`}>
         {activeCount > 0 ? (
           <>
@@ -58,7 +63,6 @@ export default function PlatformSystemControl() {
         )}
       </div>
 
-      {/* Switch List */}
       <div className="space-y-3">
         {switches.map((ks, idx) => (
           <div key={ks.id} className={`glass-card rounded-xl p-5 ${ks.enabled ? "border-destructive/40" : ""}`}>
@@ -86,33 +90,16 @@ export default function PlatformSystemControl() {
       </div>
 
       {/* Confirmation Dialog */}
-      <AlertDialog open={confirmIdx !== null} onOpenChange={() => setConfirmIdx(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pendingValue ? "⚠️ 自動処理を停止しますか？" : "自動処理を再開しますか？"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmIdx !== null && (
-                <>
-                  <strong>{switches[confirmIdx].name}</strong> を
-                  {pendingValue ? "停止" : "再開"}します。
-                  {pendingValue && " この操作により関連する自動処理がすべて停止されます。"}
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-            <AlertDialogAction
-              className={pendingValue ? "bg-destructive text-destructive-foreground" : ""}
-              onClick={confirmToggle}
-            >
-              {pendingValue ? "停止する" : "再開する"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmIdx !== null && (
+        <ConfirmDialog
+          trigger={<span />}
+          title={pendingValue ? "⚠️ 自動処理を停止しますか？" : "自動処理を再開しますか？"}
+          description={`${switches[confirmIdx].name} を${pendingValue ? "停止" : "再開"}します。${pendingValue ? " この操作により関連する自動処理がすべて停止されます。" : ""}`}
+          confirmLabel={pendingValue ? "停止する" : "再開する"}
+          destructive={pendingValue}
+          onConfirm={confirmToggle}
+        />
+      )}
     </div>
   );
 }

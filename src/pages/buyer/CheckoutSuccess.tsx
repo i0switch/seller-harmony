@@ -4,7 +4,7 @@ import { CheckCircle, MessageCircle, AlertTriangle, Clock, CreditCard } from "lu
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { formatCurrency, formatDateJP } from "@/lib/mockData";
+import { formatCurrency, formatDateJP } from "@/types";
 
 const mockCheckout = {
   planName: "プレミアム会員",
@@ -22,18 +22,14 @@ export default function CheckoutSuccess() {
 
   return (
     <div className="space-y-5">
-      {/* Success Header */}
       <div className="glass-card rounded-xl p-6 text-center space-y-3">
         <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto">
           <CheckCircle className="h-10 w-10 text-success" />
         </div>
         <h1 className="text-xl font-bold">決済が完了しました！</h1>
-        <p className="text-sm text-muted-foreground">
-          ご購入ありがとうございます。
-        </p>
+        <p className="text-sm text-muted-foreground">ご購入ありがとうございます。</p>
       </div>
 
-      {/* Purchase Details */}
       <div className="glass-card rounded-xl p-5 space-y-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
           <CreditCard className="h-4 w-4" /> 購入内容
@@ -66,7 +62,6 @@ export default function CheckoutSuccess() {
         </div>
       </div>
 
-      {/* Discord CTA */}
       <div className="glass-card rounded-xl p-5 space-y-4">
         <div className="text-center space-y-2">
           <MessageCircle className="h-10 w-10 mx-auto text-accent" />
@@ -94,9 +89,7 @@ export default function CheckoutSuccess() {
 
         {showLater && (
           <div className="glass-card rounded-lg p-3 text-sm space-y-2">
-            <p className="text-muted-foreground">
-              マイページからいつでもDiscord連携できます。
-            </p>
+            <p className="text-muted-foreground">マイページからいつでもDiscord連携できます。</p>
             <Button variant="outline" asChild size="sm" className="w-full">
               <Link to="/member/me">マイページへ</Link>
             </Button>
@@ -104,7 +97,6 @@ export default function CheckoutSuccess() {
         )}
       </div>
 
-      {/* Warning */}
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription className="text-xs">

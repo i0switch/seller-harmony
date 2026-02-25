@@ -1,22 +1,18 @@
 import { useState, useMemo } from "react";
-import { mockWebhooks, formatDateTimeJP, type WebhookStatus } from "@/lib/mockData";
+import { mockWebhooks } from "@/lib/mockData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-
-const statusLabel: Record<WebhookStatus, string> = { success: "成功", failed: "失敗", pending: "処理中" };
-const statusVariant: Record<WebhookStatus, "default" | "destructive" | "secondary"> = { success: "default", failed: "destructive", pending: "secondary" };
+import { FilterBar, EmptyState, ConfirmDialog } from "@/components/shared";
+import { webhookStatusLabel, webhookStatusVariant, formatDateTimeJP, type WebhookProcessStatus } from "@/types";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SellerWebhooks() {
   const tenantWebhooks = mockWebhooks.filter((w) => w.tenantId === "t1");
-  const [statusFilter, setStatusFilter] = useState<WebhookStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<WebhookProcessStatus | "all">("all");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const filtered = useMemo(() => {
     let list = [...tenantWebhooks];
@@ -27,50 +23,49 @@ export default function SellerWebhooks() {
 
   const detail = detailId ? tenantWebhooks.find((w) => w.id === detailId) : null;
 
+  const handleReprocess = (eventType: string) => {
+    toast({ title: "再処理を開始", description: `${eventType} の再処理を開始しました` });
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Webhook履歴</h2>
 
-      <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as WebhookStatus | "all")}>
-        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">すべて</SelectItem>
-          <SelectItem value="success">成功</SelectItem>
-          <SelectItem value="failed">失敗</SelectItem>
-          <SelectItem value="pending">処理中</SelectItem>
-        </SelectContent>
-      </Select>
+      <FilterBar
+        filters={[{
+          value: statusFilter,
+          onChange: (v) => setStatusFilter(v as WebhookProcessStatus | "all"),
+          options: [
+            { value: "all", label: "すべて" },
+            { value: "success", label: "成功" },
+            { value: "failed", label: "失敗" },
+            { value: "pending", label: "処理中" },
+          ],
+        }]}
+      />
 
       {filtered.length === 0 ? (
-        <div className="glass-card rounded-xl p-8 text-center text-muted-foreground">Webhookイベントがありません</div>
+        <EmptyState title="Webhookイベントがありません" />
       ) : (
         <div className="space-y-3">
           {filtered.map((w) => (
             <div key={w.id} className="glass-card rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs font-semibold">{w.eventType}</span>
-                <Badge variant={statusVariant[w.processStatus]}>{statusLabel[w.processStatus]}</Badge>
+                <Badge variant={webhookStatusVariant[w.processStatus]}>{webhookStatusLabel[w.processStatus]}</Badge>
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>署名: {w.signatureVerified ? "✓" : "✗"} ・ {formatDateTimeJP(w.receivedAt)}</span>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" onClick={() => setDetailId(w.id)}><Eye className="h-3 w-3" /></Button>
                   {w.processStatus === "failed" && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost"><RefreshCw className="h-3 w-3" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>再処理しますか？</AlertDialogTitle>
-                          <AlertDialogDescription>{w.eventType} を再処理します。</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                          <AlertDialogAction>再処理</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <ConfirmDialog
+                      trigger={<Button size="sm" variant="ghost"><RefreshCw className="h-3 w-3" /></Button>}
+                      title="再処理しますか？"
+                      description={`${w.eventType} を再処理します。`}
+                      confirmLabel="再処理"
+                      onConfirm={() => handleReprocess(w.eventType)}
+                    />
                   )}
                 </div>
               </div>
@@ -90,7 +85,7 @@ export default function SellerWebhooks() {
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-muted-foreground">Event ID</p><p className="font-mono text-xs">{detail.stripeEventId}</p></div>
-                <div><p className="text-muted-foreground">ステータス</p><Badge variant={statusVariant[detail.processStatus]}>{statusLabel[detail.processStatus]}</Badge></div>
+                <div><p className="text-muted-foreground">ステータス</p><Badge variant={webhookStatusVariant[detail.processStatus]}>{webhookStatusLabel[detail.processStatus]}</Badge></div>
                 <div><p className="text-muted-foreground">署名</p><p>{detail.signatureVerified ? "✓ 検証済み" : "✗ 検証失敗"}</p></div>
                 <div><p className="text-muted-foreground">受信日時</p><p>{formatDateTimeJP(detail.receivedAt)}</p></div>
               </div>
