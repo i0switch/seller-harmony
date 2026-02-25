@@ -1,27 +1,30 @@
 /**
- * Mock API Service Layer
+ * Mock API Implementation
  * 
- * Simulates API calls with configurable delay and error simulation.
- * All list endpoints return PaginatedResponse<T>.
- * Replace with real API calls (Supabase / FastAPI) when ready.
+ * Implements IPlatformApi, ISellerApi, IBuyerApi interfaces.
+ * Replace with real implementation when backend is ready.
  */
 
 import type {
   PaginatedResponse, PlatformTenant, PlatformWebhookEvent, RetryQueueJob,
   SystemAnnouncement, KillSwitchState, PlatformAlert, SellerPlan, SellerMember,
-  CrosscheckRow, TimelineEvent, BuyerMembership,
+  CrosscheckRow, TimelineEvent, BuyerMembership, DiscordValidationResult,
 } from "@/types";
+import type {
+  IPlatformApi, ISellerApi, IBuyerApi, PlatformStats, SellerStats,
+  SellerDiscordSettings, DiscordVerificationEntry,
+} from "./api.types";
 import {
   mockTenants, mockWebhooks, mockRetryQueue, mockAnnouncements, mockKillSwitches,
   mockAlerts, mockPlans, mockMembers, mockCrosscheck, mockTimeline,
   mockBuyerMemberships, mockSellerStats, mockPlatformStats, mockSellerAnnouncements,
-  mockSellerDiscord,
+  mockSellerDiscord, mockDiscordVerificationHistory,
 } from "@/lib/mockData";
 
 // ===== Config =====
 
-let mockDelay = 400; // ms
-let mockErrorRate = 0; // 0-1, 0 = no errors
+let mockDelay = 400;
+let mockErrorRate = 0;
 
 export const setMockDelay = (ms: number) => { mockDelay = ms; };
 export const setMockErrorRate = (rate: number) => { mockErrorRate = rate; };
@@ -44,12 +47,12 @@ function paginate<T>(items: T[], page: number, pageSize: number): PaginatedRespo
   };
 }
 
-// ===== Platform Admin API =====
+// ===== Platform Admin API (Mock) =====
 
-export const platformApi = {
-  getStats: () => simulateRequest(mockPlatformStats),
+export const platformApi: IPlatformApi = {
+  getStats: () => simulateRequest(mockPlatformStats as PlatformStats),
 
-  getAlerts: (params?: { resolved?: boolean }) => {
+  getAlerts: (params?) => {
     let items = [...mockAlerts] as PlatformAlert[];
     if (params?.resolved !== undefined) items = items.filter(a => a.resolved === params.resolved);
     return simulateRequest(items);
@@ -57,10 +60,10 @@ export const platformApi = {
 
   getKillSwitches: () => simulateRequest([...mockKillSwitches] as KillSwitchState[]),
 
-  toggleKillSwitch: (id: string, enabled: boolean) =>
+  toggleKillSwitch: (id, enabled) =>
     simulateRequest({ id, enabled, lastChangedAt: new Date().toISOString(), lastChangedBy: "admin@platform.com" }),
 
-  getTenants: (params: { search?: string; status?: string; sortKey?: string; sortAsc?: boolean; page?: number; pageSize?: number }) => {
+  getTenants: (params) => {
     let items = [...mockTenants] as PlatformTenant[];
     if (params.search) {
       const q = params.search.toLowerCase();
@@ -76,15 +79,15 @@ export const platformApi = {
     return simulateRequest(paginate(items, params.page || 1, params.pageSize || 5));
   },
 
-  getTenantById: (id: string) => {
+  getTenantById: (id) => {
     const tenant = mockTenants.find(t => t.id === id);
-    return simulateRequest(tenant || null);
+    return simulateRequest(tenant as PlatformTenant | null || null);
   },
 
-  suspendTenant: (id: string) => simulateRequest({ id, status: "suspended" as const }),
-  resumeTenant: (id: string) => simulateRequest({ id, status: "active" as const }),
+  suspendTenant: (id) => simulateRequest({ id, status: "suspended" }),
+  resumeTenant: (id) => simulateRequest({ id, status: "active" }),
 
-  getWebhooks: (params: { search?: string; status?: string; page?: number; pageSize?: number }) => {
+  getWebhooks: (params) => {
     let items = [...mockWebhooks] as PlatformWebhookEvent[];
     if (params.search) {
       const q = params.search.toLowerCase();
@@ -95,49 +98,52 @@ export const platformApi = {
     return simulateRequest(paginate(items, params.page || 1, params.pageSize || 5));
   },
 
-  reprocessWebhook: (id: string) => simulateRequest({ id, status: "pending" as const }),
+  reprocessWebhook: (id) => simulateRequest({ id, status: "pending" }),
 
-  getRetryQueue: (params: { jobType?: string; status?: string; page?: number; pageSize?: number }) => {
+  getRetryQueue: (params) => {
     let items = [...mockRetryQueue] as RetryQueueJob[];
     if (params.jobType && params.jobType !== "all") items = items.filter(r => r.jobType === params.jobType);
     if (params.status && params.status !== "all") items = items.filter(r => r.status === params.status);
     return simulateRequest(paginate(items, params.page || 1, params.pageSize || 5));
   },
 
-  retryJob: (id: string) => simulateRequest({ id, action: "retry" }),
-  pauseJob: (id: string) => simulateRequest({ id, action: "pause" }),
-  terminateJob: (id: string) => simulateRequest({ id, action: "terminate" }),
+  retryJob: (id) => simulateRequest({ id, action: "retry" }),
+  pauseJob: (id) => simulateRequest({ id, action: "pause" }),
+  terminateJob: (id) => simulateRequest({ id, action: "terminate" }),
 
-  getAnnouncements: (params?: { status?: string }) => {
+  getAnnouncements: (params?) => {
     let items = [...mockAnnouncements] as SystemAnnouncement[];
     if (params?.status && params.status !== "all") items = items.filter(a => a.status === params.status);
     return simulateRequest(items);
   },
 
-  saveAnnouncement: (data: Partial<SystemAnnouncement>) => simulateRequest({ ...data, id: data.id || `a${Date.now()}` }),
+  saveAnnouncement: (data) => simulateRequest({ ...data, id: data.id || `a${Date.now()}` } as Partial<SystemAnnouncement> & { id: string }),
 };
 
-// ===== Seller API =====
+// ===== Seller API (Mock) =====
 
-export const sellerApi = {
-  getStats: () => simulateRequest(mockSellerStats),
+export const sellerApi: ISellerApi = {
+  getStats: () => simulateRequest(mockSellerStats as SellerStats),
   getAnnouncements: () => simulateRequest(mockSellerAnnouncements),
-  getDiscordSettings: () => simulateRequest(mockSellerDiscord),
+  getDiscordSettings: () => simulateRequest({
+    ...mockSellerDiscord,
+    verificationHistory: mockDiscordVerificationHistory,
+  } as SellerDiscordSettings),
 
-  getPlans: (params?: { status?: string }) => {
+  getPlans: (params?) => {
     let items = [...mockPlans] as SellerPlan[];
     if (params?.status && params.status !== "all") items = items.filter(p => p.status === params.status);
     return simulateRequest(items);
   },
 
-  getPlanById: (id: string) => {
+  getPlanById: (id) => {
     const plan = mockPlans.find(p => p.id === id);
-    return simulateRequest(plan || null);
+    return simulateRequest(plan as SellerPlan | null || null);
   },
 
-  savePlan: (data: Partial<SellerPlan>) => simulateRequest({ ...data, id: data.id || `p${Date.now()}` }),
+  savePlan: (data) => simulateRequest({ ...data, id: data.id || `p${Date.now()}` } as Partial<SellerPlan> & { id: string }),
 
-  getMembers: (params: { search?: string; billingStatus?: string; sortKey?: string; sortAsc?: boolean; page?: number; pageSize?: number }) => {
+  getMembers: (params) => {
     let items = [...mockMembers] as SellerMember[];
     if (params.search) {
       const q = params.search.toLowerCase();
@@ -152,23 +158,31 @@ export const sellerApi = {
     return simulateRequest(paginate(items, params.page || 1, params.pageSize || 5));
   },
 
-  getMemberById: (id: string) => {
+  getMemberById: (id) => {
     const member = mockMembers.find(m => m.id === id);
-    return simulateRequest(member || null);
+    return simulateRequest(member as SellerMember | null || null);
   },
 
-  getMemberTimeline: (memberId: string) => {
+  getMemberTimeline: (memberId) => {
     const events = (mockTimeline[memberId] || []) as TimelineEvent[];
     return simulateRequest(events);
   },
 
-  getCrosscheck: (params?: { judgment?: string }) => {
+  getCrosscheck: (params?) => {
     let items = [...mockCrosscheck] as CrosscheckRow[];
-    if (params?.judgment && params.judgment !== "all") items = items.filter(c => c.judgment === params.judgment);
+    if (params?.judgment && params.judgment !== "all") {
+      if (params.judgment === "issues") {
+        items = items.filter(c => c.judgment !== "ok");
+      } else {
+        items = items.filter(c => c.judgment === params.judgment);
+      }
+    }
     return simulateRequest(items);
   },
 
-  getWebhooks: (params: { search?: string; status?: string; page?: number; pageSize?: number }) => {
+  runCrosscheck: () => simulateRequest({ jobId: `cc_${Date.now()}` }),
+
+  getWebhooks: (params) => {
     let items = mockWebhooks.filter(w => w.tenantId === "t1") as PlatformWebhookEvent[];
     if (params.search) {
       const q = params.search.toLowerCase();
@@ -179,7 +193,7 @@ export const sellerApi = {
     return simulateRequest(paginate(items, params.page || 1, params.pageSize || 5));
   },
 
-  validateDiscord: (guildId: string, roleId?: string) =>
+  validateDiscord: (guildId, roleId?) =>
     simulateRequest({
       botInstalled: true,
       manageRolesPermission: true,
@@ -187,12 +201,13 @@ export const sellerApi = {
       botRoleHierarchy: !!roleId,
       errorCode: null,
       errorMessage: null,
-    }),
+    } as DiscordValidationResult),
 };
 
-// ===== Buyer API =====
+// ===== Buyer API (Mock) =====
 
-export const buyerApi = {
+export const buyerApi: IBuyerApi = {
   getMemberships: () => simulateRequest(mockBuyerMemberships as BuyerMembership[]),
-  requestRoleGrant: (membershipId: string) => simulateRequest({ membershipId, action: "role_grant_requested" }),
+  requestRoleGrant: (membershipId) => simulateRequest({ membershipId, action: "role_grant_requested" }),
+  relinkDiscord: (membershipId) => simulateRequest({ membershipId, action: "discord_relink_initiated" }),
 };

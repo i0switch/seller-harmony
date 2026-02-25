@@ -223,6 +223,9 @@ export interface CrosscheckRow {
   judgment: CrosscheckJudgment;
   detail: string;
   detectedAt: string;
+  expectedState: string;
+  actualState: string;
+  suggestedAction: string;
 }
 
 export type TimelineSource = "stripe" | "webhook" | "discord" | "manual" | "system";
