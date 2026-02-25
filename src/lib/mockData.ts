@@ -357,6 +357,70 @@ export const mockSellerAnnouncements = [
   { id: "sa1", title: "メンテナンスのお知らせ", body: "2025年3月1日 2:00-4:00 にシステムメンテナンスを実施します。", severity: "warning" as const, startsAt: "2025-02-25", endsAt: "2025-03-02" },
 ];
 
+// ── Buyer Mock Data ──
+export type BuyerBillingStatus = "active" | "grace_period" | "cancel_scheduled" | "payment_failed" | "expired" | "refunded";
+export type BuyerDiscordStatus = "linked" | "unlinked" | "failed";
+export type BuyerRoleStatus = "granted" | "pending" | "revoked" | "error";
+
+export interface BuyerPlan {
+  id: string;
+  planName: string;
+  sellerName: string;
+  planType: PlanType;
+  price: number;
+  currency: string;
+  billingStatus: BuyerBillingStatus;
+  discordStatus: BuyerDiscordStatus;
+  discordUsername: string;
+  roleStatus: BuyerRoleStatus;
+  roleName: string;
+  guildName: string;
+  nextBillingDate: string | null;
+  purchasedAt: string;
+  expiresAt: string | null;
+}
+
+export const mockBuyerPlans: BuyerPlan[] = [
+  {
+    id: "bp1", planName: "プレミアム会員", sellerName: "星野アイ", planType: "subscription",
+    price: 2980, currency: "JPY", billingStatus: "active", discordStatus: "linked",
+    discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "プレミアム",
+    guildName: "星野ファンクラブ", nextBillingDate: "2025-03-01", purchasedAt: "2024-12-01", expiresAt: null,
+  },
+  {
+    id: "bp2", planName: "スタンダード会員", sellerName: "鈴木花子", planType: "subscription",
+    price: 980, currency: "JPY", billingStatus: "cancel_scheduled", discordStatus: "linked",
+    discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "スタンダード",
+    guildName: "はなちゃんねる", nextBillingDate: "2025-03-15", purchasedAt: "2025-01-15", expiresAt: "2025-03-15",
+  },
+  {
+    id: "bp3", planName: "ワンタイムパス（30日）", sellerName: "佐藤美咲", planType: "one_time",
+    price: 500, currency: "JPY", billingStatus: "expired", discordStatus: "linked",
+    discordUsername: "user_taro#1234", roleStatus: "revoked", roleName: "お試し",
+    guildName: "みさきのお部屋", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: "2025-01-31",
+  },
+  {
+    id: "bp4", planName: "VIP会員", sellerName: "伊藤さくら", planType: "subscription",
+    price: 9800, currency: "JPY", billingStatus: "payment_failed", discordStatus: "linked",
+    discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "VIP",
+    guildName: "さくらファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: null,
+  },
+];
+
+export const buyerBillingStatusLabel: Record<BuyerBillingStatus, string> = {
+  active: "有効", grace_period: "猶予期間", cancel_scheduled: "解約予定",
+  payment_failed: "決済失敗", expired: "期限切れ", refunded: "返金済",
+};
+export const buyerBillingStatusVariant: Record<BuyerBillingStatus, "default" | "secondary" | "destructive" | "outline"> = {
+  active: "default", grace_period: "secondary", cancel_scheduled: "outline",
+  payment_failed: "destructive", expired: "outline", refunded: "secondary",
+};
+export const buyerDiscordStatusLabel: Record<BuyerDiscordStatus, string> = { linked: "連携済", unlinked: "未連携", failed: "連携失敗" };
+export const buyerRoleStatusLabel: Record<BuyerRoleStatus, string> = { granted: "付与済", pending: "保留中", revoked: "剥奪済", error: "エラー" };
+export const buyerRoleStatusVariant: Record<BuyerRoleStatus, "default" | "secondary" | "destructive" | "outline"> = {
+  granted: "default", pending: "secondary", revoked: "outline", error: "destructive",
+};
+
 // ── Computed Stats ──
 export const mockPlatformStats = {
   activeTenants: mockTenants.filter((t) => t.status === "active").length,
