@@ -13,7 +13,7 @@ import type {
 import type {
   IPlatformApi, ISellerApi, IBuyerApi, PlatformStats, SellerStats,
   SellerDiscordSettings, DiscordVerificationEntry,
-} from "./api.types";
+} from "../../api.types";
 import {
   mockTenants, mockWebhooks, mockRetryQueue, mockAnnouncements, mockKillSwitches,
   mockAlerts, mockPlans, mockMembers, mockCrosscheck, mockTimeline,

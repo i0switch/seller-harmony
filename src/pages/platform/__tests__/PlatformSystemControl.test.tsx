@@ -79,7 +79,7 @@ describe('PlatformSystemControl', () => {
                 lastChangedBy: 'admin',
             }
         ]);
-        vi.mocked(platformApi.toggleKillSwitch).mockResolvedValue({ id: 'ks1', enabled: true, lastChangedAt: '2023-01-01T00:00:00Z', lastChangedBy: 'admin', name: '', description: '' });
+        vi.mocked(platformApi.toggleKillSwitch).mockResolvedValue({ id: 'ks1', enabled: true });
 
         renderComponent();
 
