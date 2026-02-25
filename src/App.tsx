@@ -27,7 +27,6 @@ import OnboardingDiscord from "./pages/seller/OnboardingDiscord";
 import OnboardingComplete from "./pages/seller/OnboardingComplete";
 import SellerDashboard from "./pages/seller/SellerDashboard";
 import SellerPlans from "./pages/seller/SellerPlans";
-import SellerPlanNew from "./pages/seller/SellerPlanNew";
 import SellerPlanDetail from "./pages/seller/SellerPlanDetail";
 import SellerMembers from "./pages/seller/SellerMembers";
 import SellerMemberDetail from "./pages/seller/SellerMemberDetail";
@@ -78,7 +77,7 @@ const App = () => (
           <Route path="/seller" element={<SellerLayout />}>
             <Route path="dashboard" element={<SellerDashboard />} />
             <Route path="plans" element={<SellerPlans />} />
-            <Route path="plans/new" element={<SellerPlanNew />} />
+            <Route path="plans/new" element={<SellerPlanDetail />} />
             <Route path="plans/:id" element={<SellerPlanDetail />} />
             <Route path="members" element={<SellerMembers />} />
             <Route path="members/:id" element={<SellerMemberDetail />} />

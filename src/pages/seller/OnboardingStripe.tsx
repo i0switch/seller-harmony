@@ -1,34 +1,84 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { CreditCard } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { CreditCard, ExternalLink, ArrowLeft } from "lucide-react";
+import { OnboardingShell } from "@/components/OnboardingStepIndicator";
+
+type StripeState = "not_started" | "pending" | "verified" | "restricted";
+const stateLabel: Record<StripeState, string> = { not_started: "未開始", pending: "審査中", verified: "有効", restricted: "制限あり" };
+const stateVariant: Record<StripeState, "outline" | "secondary" | "default" | "destructive"> = { not_started: "outline", pending: "secondary", verified: "default", restricted: "destructive" };
 
 export default function OnboardingStripe() {
   const navigate = useNavigate();
+  const [state, setState] = useState<StripeState>("not_started");
+
+  const startOnboarding = () => setState("pending");
+  const mockComplete = () => setState("verified");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md glass-card rounded-xl p-6 space-y-6">
-        <div>
-          <p className="text-xs text-accent font-medium">ステップ 2 / 4</p>
-          <h1 className="text-xl font-bold mt-1">Stripe Connect連携</h1>
-          <p className="text-sm text-muted-foreground mt-1">売上を受け取るためにStripeアカウントを連携してください</p>
+    <OnboardingShell step={1}>
+      <div>
+        <h1 className="text-xl font-bold">Stripe Connect連携</h1>
+        <p className="text-sm text-muted-foreground mt-1">売上を受け取るためにStripeアカウントを連携してください</p>
+      </div>
+
+      <div className="glass-card rounded-lg p-5 text-center space-y-4">
+        <CreditCard className="h-12 w-12 mx-auto text-accent" />
+        <div className="flex items-center justify-center gap-2">
+          <span className="text-sm font-medium">ステータス:</span>
+          <Badge variant={stateVariant[state]}>{stateLabel[state]}</Badge>
         </div>
-        <div className="glass-card rounded-lg p-5 text-center space-y-4">
-          <CreditCard className="h-12 w-12 mx-auto text-accent" />
-          <div>
-            <p className="font-semibold">本人確認・口座登録</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Stripe Expressを使用して安全にKYCと口座登録を行います
-            </p>
+
+        {state === "not_started" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Stripe Expressを使用して安全にKYCと口座登録を行います</p>
+            <Button className="w-full" onClick={startOnboarding}>
+              <ExternalLink className="h-4 w-4 mr-2" /> Stripeオンボーディングを開始
+            </Button>
           </div>
-          <Button variant="outline" className="w-full" onClick={() => navigate("/seller/onboarding/discord")}>
-            Stripeオンボーディングを開始（モック）
-          </Button>
-        </div>
-        <Button variant="ghost" onClick={() => navigate("/seller/onboarding/discord")} className="w-full text-muted-foreground">
-          スキップ（あとで設定）
+        )}
+
+        {state === "pending" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Stripeで本人確認・口座登録を完了してください</p>
+            <Button variant="outline" className="w-full" onClick={startOnboarding}>
+              <ExternalLink className="h-4 w-4 mr-2" /> Stripeオンボーディングを再開
+            </Button>
+            <Button size="sm" variant="ghost" onClick={mockComplete} className="text-xs text-muted-foreground">
+              （デモ用: 完了にする）
+            </Button>
+          </div>
+        )}
+
+        {state === "verified" && (
+          <p className="text-sm text-success font-medium">✓ Stripe連携が完了しました</p>
+        )}
+
+        {state === "restricted" && (
+          <div className="space-y-3">
+            <p className="text-sm text-destructive">アカウントに制限があります。Stripeダッシュボードで確認してください。</p>
+            <Button variant="outline" className="w-full" onClick={startOnboarding}>
+              <ExternalLink className="h-4 w-4 mr-2" /> Stripeダッシュボードを開く
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={() => navigate("/seller/onboarding/profile")} className="flex-1">
+          <ArrowLeft className="h-4 w-4 mr-1" /> 戻る
+        </Button>
+        <Button onClick={() => navigate("/seller/onboarding/discord")} className="flex-1" disabled={state === "not_started"}>
+          次へ
         </Button>
       </div>
-    </div>
+
+      {state === "not_started" && (
+        <Button variant="ghost" onClick={() => navigate("/seller/onboarding/discord")} className="w-full text-xs text-muted-foreground">
+          スキップ（あとで設定）
+        </Button>
+      )}
+    </OnboardingShell>
   );
 }
