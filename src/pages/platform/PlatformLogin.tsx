@@ -3,14 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePlatformAuth } from "@/hooks/useRouteGuard";
 
 export default function PlatformLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@platform.com");
   const [password, setPassword] = useState("password");
+  const { login } = usePlatformAuth();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    login();
     navigate("/platform/dashboard");
   };
 

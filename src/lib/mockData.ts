@@ -1,101 +1,39 @@
-// Mock data for the fanclub automation SaaS - Platform Admin focused
+// Mock data for the fanclub automation SaaS
 
 // ── Tenants ──
 export type TenantStatus = "trial" | "active" | "suspended" | "canceled";
 export type StripeConnectStatus = "not_started" | "pending" | "verified" | "restricted";
 
 export interface Tenant {
-  id: string;
-  name: string;
-  email: string;
-  status: TenantStatus;
-  stripeStatus: StripeConnectStatus;
-  discordGuild: string;
-  discordConnected: boolean;
-  memberCount: number;
-  mrr: number;
-  errorCount: number;
-  createdAt: string;
-  lastActiveAt: string;
+  id: string; name: string; email: string; status: TenantStatus;
+  stripeStatus: StripeConnectStatus; discordGuild: string; discordConnected: boolean;
+  memberCount: number; mrr: number; errorCount: number; createdAt: string; lastActiveAt: string;
 }
 
 export const mockTenants: Tenant[] = [
-  {
-    id: "t1", name: "星野アイ", email: "ai@example.com", status: "active",
-    stripeStatus: "verified", discordGuild: "星野ファンクラブ", discordConnected: true,
-    memberCount: 342, mrr: 512800, errorCount: 1, createdAt: "2024-11-15", lastActiveAt: "2025-02-25T09:30:00Z",
-  },
-  {
-    id: "t2", name: "鈴木花子", email: "hanako@example.com", status: "active",
-    stripeStatus: "verified", discordGuild: "はなちゃんねる", discordConnected: true,
-    memberCount: 128, mrr: 127200, errorCount: 0, createdAt: "2025-01-03", lastActiveAt: "2025-02-25T08:15:00Z",
-  },
-  {
-    id: "t3", name: "田中太郎", email: "taro@example.com", status: "trial",
-    stripeStatus: "pending", discordGuild: "", discordConnected: false,
-    memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2025-02-20", lastActiveAt: "2025-02-24T14:00:00Z",
-  },
-  {
-    id: "t4", name: "佐藤美咲", email: "misaki@example.com", status: "active",
-    stripeStatus: "verified", discordGuild: "みさきのお部屋", discordConnected: true,
-    memberCount: 89, mrr: 87220, errorCount: 0, createdAt: "2024-12-01", lastActiveAt: "2025-02-25T07:45:00Z",
-  },
-  {
-    id: "t5", name: "山田一郎", email: "ichiro@example.com", status: "suspended",
-    stripeStatus: "restricted", discordGuild: "山田チャンネル", discordConnected: true,
-    memberCount: 45, mrr: 0, errorCount: 5, createdAt: "2024-10-15", lastActiveAt: "2025-02-10T12:00:00Z",
-  },
-  {
-    id: "t6", name: "高橋りな", email: "rina@example.com", status: "canceled",
-    stripeStatus: "verified", discordGuild: "りなワールド", discordConnected: false,
-    memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2024-09-01", lastActiveAt: "2025-01-15T10:00:00Z",
-  },
-  {
-    id: "t7", name: "中村ケン", email: "ken@example.com", status: "trial",
-    stripeStatus: "not_started", discordGuild: "", discordConnected: false,
-    memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2025-02-23", lastActiveAt: "2025-02-24T18:00:00Z",
-  },
-  {
-    id: "t8", name: "伊藤さくら", email: "sakura.ito@example.com", status: "active",
-    stripeStatus: "verified", discordGuild: "さくらファンクラブ", discordConnected: true,
-    memberCount: 210, mrr: 310800, errorCount: 2, createdAt: "2024-11-20", lastActiveAt: "2025-02-25T10:00:00Z",
-  },
-  {
-    id: "t9", name: "渡辺ゆう", email: "yuu@example.com", status: "active",
-    stripeStatus: "verified", discordGuild: "ゆうちゃんサロン", discordConnected: true,
-    memberCount: 67, mrr: 65660, errorCount: 0, createdAt: "2025-01-10", lastActiveAt: "2025-02-25T06:00:00Z",
-  },
-  {
-    id: "t10", name: "木村そら", email: "sora@example.com", status: "trial",
-    stripeStatus: "pending", discordGuild: "", discordConnected: false,
-    memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2025-02-22", lastActiveAt: "2025-02-23T20:00:00Z",
-  },
-  {
-    id: "t11", name: "松本ひかり", email: "hikari@example.com", status: "active",
-    stripeStatus: "verified", discordGuild: "ひかりサロン", discordConnected: true,
-    memberCount: 155, mrr: 151900, errorCount: 0, createdAt: "2024-12-15", lastActiveAt: "2025-02-25T11:00:00Z",
-  },
-  {
-    id: "t12", name: "井上たくや", email: "takuya@example.com", status: "suspended",
-    stripeStatus: "restricted", discordGuild: "たくやクラブ", discordConnected: false,
-    memberCount: 12, mrr: 0, errorCount: 8, createdAt: "2024-10-01", lastActiveAt: "2025-02-05T09:00:00Z",
-  },
+  { id: "t1", name: "星野アイ", email: "ai@example.com", status: "active", stripeStatus: "verified", discordGuild: "星野ファンクラブ", discordConnected: true, memberCount: 342, mrr: 512800, errorCount: 1, createdAt: "2024-11-15", lastActiveAt: "2025-02-25T09:30:00Z" },
+  { id: "t2", name: "鈴木花子", email: "hanako@example.com", status: "active", stripeStatus: "verified", discordGuild: "はなちゃんねる", discordConnected: true, memberCount: 128, mrr: 127200, errorCount: 0, createdAt: "2025-01-03", lastActiveAt: "2025-02-25T08:15:00Z" },
+  { id: "t3", name: "田中太郎", email: "taro@example.com", status: "trial", stripeStatus: "pending", discordGuild: "", discordConnected: false, memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2025-02-20", lastActiveAt: "2025-02-24T14:00:00Z" },
+  { id: "t4", name: "佐藤美咲", email: "misaki@example.com", status: "active", stripeStatus: "verified", discordGuild: "みさきのお部屋", discordConnected: true, memberCount: 89, mrr: 87220, errorCount: 0, createdAt: "2024-12-01", lastActiveAt: "2025-02-25T07:45:00Z" },
+  { id: "t5", name: "山田一郎", email: "ichiro@example.com", status: "suspended", stripeStatus: "restricted", discordGuild: "山田チャンネル", discordConnected: true, memberCount: 45, mrr: 0, errorCount: 5, createdAt: "2024-10-15", lastActiveAt: "2025-02-10T12:00:00Z" },
+  { id: "t6", name: "高橋りな", email: "rina@example.com", status: "canceled", stripeStatus: "verified", discordGuild: "りなワールド", discordConnected: false, memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2024-09-01", lastActiveAt: "2025-01-15T10:00:00Z" },
+  { id: "t7", name: "中村ケン", email: "ken@example.com", status: "trial", stripeStatus: "not_started", discordGuild: "", discordConnected: false, memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2025-02-23", lastActiveAt: "2025-02-24T18:00:00Z" },
+  { id: "t8", name: "伊藤さくら", email: "sakura.ito@example.com", status: "active", stripeStatus: "verified", discordGuild: "さくらファンクラブ", discordConnected: true, memberCount: 210, mrr: 310800, errorCount: 2, createdAt: "2024-11-20", lastActiveAt: "2025-02-25T10:00:00Z" },
+  { id: "t9", name: "渡辺ゆう", email: "yuu@example.com", status: "active", stripeStatus: "verified", discordGuild: "ゆうちゃんサロン", discordConnected: true, memberCount: 67, mrr: 65660, errorCount: 0, createdAt: "2025-01-10", lastActiveAt: "2025-02-25T06:00:00Z" },
+  { id: "t10", name: "木村そら", email: "sora@example.com", status: "trial", stripeStatus: "pending", discordGuild: "", discordConnected: false, memberCount: 0, mrr: 0, errorCount: 0, createdAt: "2025-02-22", lastActiveAt: "2025-02-23T20:00:00Z" },
+  { id: "t11", name: "松本ひかり", email: "hikari@example.com", status: "active", stripeStatus: "verified", discordGuild: "ひかりサロン", discordConnected: true, memberCount: 155, mrr: 151900, errorCount: 0, createdAt: "2024-12-15", lastActiveAt: "2025-02-25T11:00:00Z" },
+  { id: "t12", name: "井上たくや", email: "takuya@example.com", status: "suspended", stripeStatus: "restricted", discordGuild: "たくやクラブ", discordConnected: false, memberCount: 12, mrr: 0, errorCount: 8, createdAt: "2024-10-01", lastActiveAt: "2025-02-05T09:00:00Z" },
+  // Abnormal: Stripe未完了のまま放置
+  { id: "t13", name: "藤井まこ", email: "mako@example.com", status: "trial", stripeStatus: "not_started", discordGuild: "", discordConnected: false, memberCount: 0, mrr: 0, errorCount: 3, createdAt: "2025-01-05", lastActiveAt: "2025-01-10T09:00:00Z" },
 ];
 
 // ── Webhooks ──
 export type WebhookStatus = "success" | "failed" | "pending";
 
 export interface WebhookEvent {
-  id: string;
-  eventType: string;
-  processStatus: WebhookStatus;
-  signatureVerified: boolean;
-  receivedAt: string;
-  tenantId: string;
-  tenantName: string;
-  error: string | null;
-  payload: string;
-  stripeEventId: string;
+  id: string; eventType: string; processStatus: WebhookStatus; signatureVerified: boolean;
+  receivedAt: string; tenantId: string; tenantName: string; error: string | null;
+  payload: string; stripeEventId: string;
 }
 
 export const mockWebhooks: WebhookEvent[] = [
@@ -111,6 +49,10 @@ export const mockWebhooks: WebhookEvent[] = [
   { id: "wh10", eventType: "account.updated", processStatus: "failed", signatureVerified: true, receivedAt: "2025-02-24T16:00:00Z", tenantId: "t12", tenantName: "井上たくや", error: "Account restricted - manual review required", payload: '{"id":"acct_xyz"}', stripeEventId: "evt_10bcd" },
   { id: "wh11", eventType: "checkout.session.completed", processStatus: "success", signatureVerified: true, receivedAt: "2025-02-25T11:00:00Z", tenantId: "t1", tenantName: "星野アイ", error: null, payload: '{"id":"cs_999"}', stripeEventId: "evt_11efg" },
   { id: "wh12", eventType: "customer.subscription.deleted", processStatus: "pending", signatureVerified: true, receivedAt: "2025-02-25T11:05:00Z", tenantId: "t4", tenantName: "佐藤美咲", error: null, payload: '{"id":"sub_888"}', stripeEventId: "evt_12hij" },
+  // Abnormal: Webhook多重失敗
+  { id: "wh13", eventType: "invoice.payment_failed", processStatus: "failed", signatureVerified: true, receivedAt: "2025-02-25T11:30:00Z", tenantId: "t5", tenantName: "山田一郎", error: "Stripe account restricted", payload: '{"id":"in_fail1"}', stripeEventId: "evt_13abc" },
+  { id: "wh14", eventType: "invoice.payment_failed", processStatus: "failed", signatureVerified: true, receivedAt: "2025-02-25T11:35:00Z", tenantId: "t5", tenantName: "山田一郎", error: "Stripe account restricted", payload: '{"id":"in_fail2"}', stripeEventId: "evt_14def" },
+  { id: "wh15", eventType: "checkout.session.completed", processStatus: "failed", signatureVerified: true, receivedAt: "2025-02-25T11:40:00Z", tenantId: "t12", tenantName: "井上たくや", error: "Discord bot not in guild", payload: '{"id":"cs_fail1"}', stripeEventId: "evt_15ghi" },
 ];
 
 // ── Retry Queue ──
@@ -118,16 +60,9 @@ export type RetryJobType = "webhook" | "discord" | "sync";
 export type RetryStatus = "pending" | "paused" | "exhausted";
 
 export interface RetryJob {
-  id: string;
-  jobType: RetryJobType;
-  tenantId: string;
-  tenantName: string;
-  nextRetryAt: string;
-  retryCount: number;
-  maxRetries: number;
-  lastError: string;
-  status: RetryStatus;
-  createdAt: string;
+  id: string; jobType: RetryJobType; tenantId: string; tenantName: string;
+  nextRetryAt: string; retryCount: number; maxRetries: number; lastError: string;
+  status: RetryStatus; createdAt: string;
 }
 
 export const mockRetryQueue: RetryJob[] = [
@@ -136,6 +71,8 @@ export const mockRetryQueue: RetryJob[] = [
   { id: "rq3", jobType: "sync", tenantId: "t8", tenantName: "伊藤さくら", nextRetryAt: "2025-02-25T13:00:00Z", retryCount: 1, maxRetries: 3, lastError: "Stripe API timeout", status: "pending", createdAt: "2025-02-25T07:00:00Z" },
   { id: "rq4", jobType: "discord", tenantId: "t12", tenantName: "井上たくや", nextRetryAt: "", retryCount: 5, maxRetries: 5, lastError: "Account restricted", status: "exhausted", createdAt: "2025-02-20T08:00:00Z" },
   { id: "rq5", jobType: "webhook", tenantId: "t8", tenantName: "伊藤さくら", nextRetryAt: "", retryCount: 3, maxRetries: 5, lastError: "Signature verification failed", status: "paused", createdAt: "2025-02-24T19:00:00Z" },
+  // Abnormal: Discord権限不足で多重リトライ
+  { id: "rq6", jobType: "discord", tenantId: "t5", tenantName: "山田一郎", nextRetryAt: "", retryCount: 5, maxRetries: 5, lastError: "Missing Access: Bot lacks Manage Roles permission", status: "exhausted", createdAt: "2025-02-18T08:00:00Z" },
 ];
 
 // ── Announcements ──
@@ -144,17 +81,9 @@ export type AnnouncementSeverity = "info" | "warning" | "critical";
 export type AnnouncementTarget = "all" | "active" | "trial" | "specific";
 
 export interface Announcement {
-  id: string;
-  title: string;
-  body: string;
-  severity: AnnouncementSeverity;
-  targetScope: AnnouncementTarget;
-  status: AnnouncementStatus;
-  startsAt: string;
-  endsAt: string;
-  isPublished: boolean;
-  createdAt: string;
-  updatedAt: string;
+  id: string; title: string; body: string; severity: AnnouncementSeverity;
+  targetScope: AnnouncementTarget; status: AnnouncementStatus; startsAt: string;
+  endsAt: string; isPublished: boolean; createdAt: string; updatedAt: string;
 }
 
 export const mockAnnouncements: Announcement[] = [
@@ -168,13 +97,8 @@ export const mockAnnouncements: Announcement[] = [
 export type AlertLevel = "error" | "warning" | "info";
 
 export interface PlatformAlert {
-  id: string;
-  level: AlertLevel;
-  message: string;
-  source: string;
-  tenantName: string | null;
-  timestamp: string;
-  resolved: boolean;
+  id: string; level: AlertLevel; message: string; source: string;
+  tenantName: string | null; timestamp: string; resolved: boolean;
 }
 
 export const mockAlerts: PlatformAlert[] = [
@@ -184,16 +108,14 @@ export const mockAlerts: PlatformAlert[] = [
   { id: "al4", level: "warning", message: "署名検証失敗のWebhookを検出 (伊藤さくら)", source: "webhook_processor", tenantName: "伊藤さくら", timestamp: "2025-02-24T19:00:00Z", resolved: false },
   { id: "al5", level: "info", message: "番人バッチ正常完了: 不整合0件", source: "watchdog", tenantName: null, timestamp: "2025-02-25T03:00:00Z", resolved: true },
   { id: "al6", level: "error", message: "Discord Bot接続断: 井上たくや", source: "discord_monitor", tenantName: "井上たくや", timestamp: "2025-02-22T15:00:00Z", resolved: false },
+  // Abnormal: Discord権限不足による連続アラート
+  { id: "al7", level: "error", message: "Discord Manage Roles権限不足: 山田一郎 - ロール付与不可", source: "discord_monitor", tenantName: "山田一郎", timestamp: "2025-02-25T08:00:00Z", resolved: false },
 ];
 
 // ── Kill Switches ──
 export interface KillSwitch {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  lastChangedAt: string;
-  lastChangedBy: string;
+  id: string; name: string; description: string; enabled: boolean;
+  lastChangedAt: string; lastChangedBy: string;
 }
 
 export const mockKillSwitches: KillSwitch[] = [
@@ -209,20 +131,10 @@ export type PlanType = "subscription" | "one_time";
 export type GrantPolicy = "unlimited" | "limited";
 
 export interface SellerPlan {
-  id: string;
-  name: string;
-  description: string;
-  planType: PlanType;
-  price: number;
-  currency: string;
-  status: PlanStatus;
-  discordGuildId: string;
-  discordRoleId: string;
-  discordRoleName: string;
-  memberCount: number;
-  grantPolicy: GrantPolicy;
-  grantDays: number | null;
-  createdAt: string;
+  id: string; name: string; description: string; planType: PlanType; price: number;
+  currency: string; status: PlanStatus; discordGuildId: string; discordRoleId: string;
+  discordRoleName: string; memberCount: number; grantPolicy: GrantPolicy;
+  grantDays: number | null; createdAt: string;
 }
 
 export const mockPlans: SellerPlan[] = [
@@ -243,19 +155,10 @@ export type DiscordLinkStatus = "linked" | "unlinked" | "expired";
 export type RoleStatus = "granted" | "pending" | "revoked" | "error";
 
 export interface SellerMember {
-  id: string;
-  name: string;
-  email: string;
-  planId: string;
-  planName: string;
-  billingStatus: MemberBillingStatus;
-  discordUsername: string;
-  discordId: string;
-  discordLinkStatus: DiscordLinkStatus;
-  roleStatus: RoleStatus;
-  lastError: string | null;
-  joinedAt: string;
-  lastPayment: string;
+  id: string; name: string; email: string; planId: string; planName: string;
+  billingStatus: MemberBillingStatus; discordUsername: string; discordId: string;
+  discordLinkStatus: DiscordLinkStatus; roleStatus: RoleStatus;
+  lastError: string | null; joinedAt: string; lastPayment: string;
 }
 
 export const mockMembers: SellerMember[] = [
@@ -267,6 +170,10 @@ export const mockMembers: SellerMember[] = [
   { id: "m6", name: "ケンタ", email: "kenta@example.com", planId: "p1", planName: "スタンダード会員", billingStatus: "active", discordUsername: "", discordId: "", discordLinkStatus: "unlinked", roleStatus: "pending", lastError: "Discord未連携", joinedAt: "2025-02-10", lastPayment: "2025-02-10" },
   { id: "m7", name: "マイ", email: "mai@example.com", planId: "p4", planName: "ワンタイムパス（30日）", billingStatus: "active", discordUsername: "mai_desu#2222", discordId: "222333444", discordLinkStatus: "linked", roleStatus: "granted", lastError: null, joinedAt: "2025-02-01", lastPayment: "2025-02-01" },
   { id: "m8", name: "ソウタ", email: "souta@example.com", planId: "p2", planName: "プレミアム会員", billingStatus: "unpaid", discordUsername: "souta#3333", discordId: "555666777", discordLinkStatus: "linked", roleStatus: "error", lastError: "Discord API error: Unknown Role", joinedAt: "2024-12-15", lastPayment: "2024-12-15" },
+  // Abnormal: Discord token expired
+  { id: "m9", name: "アヤカ", email: "ayaka@example.com", planId: "p1", planName: "スタンダード会員", billingStatus: "active", discordUsername: "ayaka#4444", discordId: "888999000", discordLinkStatus: "expired", roleStatus: "pending", lastError: "Discord OAuthトークン期限切れ: 再連携が必要です", joinedAt: "2024-11-15", lastPayment: "2025-02-15" },
+  // Abnormal: Stripe未完了で支払い失敗
+  { id: "m10", name: "ヒロシ", email: "hiroshi@example.com", planId: "p2", planName: "プレミアム会員", billingStatus: "unpaid", discordUsername: "hiroshi#5555", discordId: "111000222", discordLinkStatus: "linked", roleStatus: "granted", lastError: "Stripe: カード有効期限切れ（exp_month=12, exp_year=2024）", joinedAt: "2024-09-01", lastPayment: "2024-12-01" },
 ];
 
 export const billingStatusLabel: Record<MemberBillingStatus, string> = { active: "有効", past_due: "支払い遅延", canceled: "解約済", unpaid: "未払い" };
@@ -279,15 +186,13 @@ export const roleStatusVariant: Record<RoleStatus, "default" | "secondary" | "de
 export type CrosscheckJudgment = "ok" | "needs_relink" | "needs_grant" | "needs_revoke" | "error" | "grace_period";
 
 export interface CrosscheckItem {
-  memberId: string;
-  memberName: string;
-  discordUsername: string;
-  planName: string;
-  billingStatus: MemberBillingStatus;
-  roleStatus: RoleStatus;
-  judgment: CrosscheckJudgment;
-  detail: string;
-  detectedAt: string;
+  memberId: string; memberName: string; discordUsername: string; planName: string;
+  billingStatus: MemberBillingStatus; roleStatus: RoleStatus;
+  judgment: CrosscheckJudgment; detail: string; detectedAt: string;
+  // Enhanced detail fields
+  expectedState: string;
+  actualState: string;
+  suggestedAction: string;
 }
 
 export const crosscheckJudgmentLabel: Record<CrosscheckJudgment, string> = {
@@ -298,22 +203,22 @@ export const crosscheckJudgmentVariant: Record<CrosscheckJudgment, "default" | "
 };
 
 export const mockCrosscheck: CrosscheckItem[] = [
-  { memberId: "m1", memberName: "太郎", discordUsername: "user_taro#1234", planName: "プレミアム会員", billingStatus: "active", roleStatus: "granted", judgment: "ok", detail: "正常", detectedAt: "2025-02-25T08:00:00Z" },
-  { memberId: "m2", memberName: "さくら", discordUsername: "sakura_fan#5678", planName: "スタンダード会員", billingStatus: "active", roleStatus: "granted", judgment: "ok", detail: "正常", detectedAt: "2025-02-25T08:00:00Z" },
-  { memberId: "m3", memberName: "ゴーストユーザー", discordUsername: "ghost_user#0000", planName: "スタンダード会員", billingStatus: "canceled", roleStatus: "granted", judgment: "needs_revoke", detail: "Stripe解約済みだがDiscordロール付与中", detectedAt: "2025-02-25T08:00:00Z" },
-  { memberId: "m5", memberName: "リカ", discordUsername: "rika_chan#1111", planName: "プレミアム会員", billingStatus: "past_due", roleStatus: "granted", judgment: "grace_period", detail: "支払い遅延中（猶予期間3日目）", detectedAt: "2025-02-25T08:00:00Z" },
-  { memberId: "m6", memberName: "ケンタ", discordUsername: "", planName: "スタンダード会員", billingStatus: "active", roleStatus: "pending", judgment: "needs_relink", detail: "決済完了だがDiscord未連携のためロール未付与", detectedAt: "2025-02-25T08:00:00Z" },
-  { memberId: "m8", memberName: "ソウタ", discordUsername: "souta#3333", planName: "プレミアム会員", billingStatus: "unpaid", roleStatus: "error", judgment: "error", detail: "Discord API error: Unknown Role - ロールIDの確認が必要", detectedAt: "2025-02-25T08:00:00Z" },
+  { memberId: "m1", memberName: "太郎", discordUsername: "user_taro#1234", planName: "プレミアム会員", billingStatus: "active", roleStatus: "granted", judgment: "ok", detail: "課金もロールも正常です", detectedAt: "2025-02-25T08:00:00Z", expectedState: "active + granted", actualState: "active + granted", suggestedAction: "なし" },
+  { memberId: "m2", memberName: "さくら", discordUsername: "sakura_fan#5678", planName: "スタンダード会員", billingStatus: "active", roleStatus: "granted", judgment: "ok", detail: "課金もロールも正常です", detectedAt: "2025-02-25T08:00:00Z", expectedState: "active + granted", actualState: "active + granted", suggestedAction: "なし" },
+  { memberId: "m3", memberName: "ゴーストユーザー", discordUsername: "ghost_user#0000", planName: "スタンダード会員", billingStatus: "canceled", roleStatus: "granted", judgment: "needs_revoke", detail: "Stripeでは解約済みですが、Discordロールがまだ付与されています。Bot権限不足により自動剥奪に失敗しています。", detectedAt: "2025-02-25T08:00:00Z", expectedState: "canceled + revoked", actualState: "canceled + granted", suggestedAction: "Discord設定でBot権限を確認し、手動でロールを剥奪してください" },
+  { memberId: "m5", memberName: "リカ", discordUsername: "rika_chan#1111", planName: "プレミアム会員", billingStatus: "past_due", roleStatus: "granted", judgment: "grace_period", detail: "支払いが遅延しています（3日目）。猶予期間設定（7日）の範囲内のため、ロールは維持されています。猶予期間を超えると自動剥奪されます。", detectedAt: "2025-02-25T08:00:00Z", expectedState: "past_due + granted (猶予期間内)", actualState: "past_due + granted", suggestedAction: "会員に支払い更新を案内してください" },
+  { memberId: "m6", memberName: "ケンタ", discordUsername: "", planName: "スタンダード会員", billingStatus: "active", roleStatus: "pending", judgment: "needs_relink", detail: "決済は完了していますが、Discord連携がされていないため、ロールを付与できません。", detectedAt: "2025-02-25T08:00:00Z", expectedState: "active + granted", actualState: "active + pending (Discord未連携)", suggestedAction: "会員にDiscord連携を案内してください" },
+  { memberId: "m8", memberName: "ソウタ", discordUsername: "souta#3333", planName: "プレミアム会員", billingStatus: "unpaid", roleStatus: "error", judgment: "error", detail: "Discord API からエラー「Unknown Role」が返されています。プランに設定されたロールIDが無効になっている可能性があります。", detectedAt: "2025-02-25T08:00:00Z", expectedState: "unpaid + revoked", actualState: "unpaid + error", suggestedAction: "プランのDiscordロールID設定を確認してください" },
+  // Abnormal: token expired
+  { memberId: "m9", memberName: "アヤカ", discordUsername: "ayaka#4444", planName: "スタンダード会員", billingStatus: "active", roleStatus: "pending", judgment: "needs_grant", detail: "課金は有効ですが、Discord OAuthトークンが期限切れのため、ロール付与APIを呼び出せません。会員に再連携を依頼してください。", detectedAt: "2025-02-25T08:00:00Z", expectedState: "active + granted", actualState: "active + pending (token expired)", suggestedAction: "会員にDiscord再連携を案内してください" },
+  // Abnormal: カード期限切れ
+  { memberId: "m10", memberName: "ヒロシ", discordUsername: "hiroshi#5555", planName: "プレミアム会員", billingStatus: "unpaid", roleStatus: "granted", judgment: "needs_revoke", detail: "カード有効期限切れにより3ヶ月間未払いです。猶予期間を超過していますが、ロールが残っています。", detectedAt: "2025-02-25T08:00:00Z", expectedState: "unpaid + revoked", actualState: "unpaid + granted", suggestedAction: "ロールを手動で剥奪してください" },
 ];
 
 // ── Member Timeline ──
 export type TimelineSource = "stripe" | "webhook" | "discord" | "manual" | "system";
 export interface TimelineEvent {
-  id: string;
-  source: TimelineSource;
-  event: string;
-  detail: string;
-  timestamp: string;
+  id: string; source: TimelineSource; event: string; detail: string; timestamp: string;
 }
 
 export const mockTimeline: Record<string, TimelineEvent[]> = {
@@ -349,8 +254,26 @@ export const mockSellerDiscord = {
   botHasManageRoles: true,
   defaultRoleId: "role_standard",
   defaultRoleName: "スタンダード",
-  lastVerifiedAt: "2025-02-24T10:00:00Z",
+  lastVerifiedAt: "2025-02-25T10:30:00Z",
 };
+
+// ── Discord Verification History ──
+export interface DiscordVerificationHistoryEntry {
+  id: string;
+  timestamp: string;
+  success: boolean;
+  checks: { botInstalled: boolean; manageRolesPermission: boolean; roleExists: boolean; botRoleHierarchy: boolean; };
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export const mockDiscordVerificationHistory: DiscordVerificationHistoryEntry[] = [
+  { id: "dv1", timestamp: "2025-02-25T10:30:00Z", success: true, checks: { botInstalled: true, manageRolesPermission: true, roleExists: true, botRoleHierarchy: true }, errorCode: null, errorMessage: null },
+  { id: "dv2", timestamp: "2025-02-20T14:00:00Z", success: true, checks: { botInstalled: true, manageRolesPermission: true, roleExists: true, botRoleHierarchy: true }, errorCode: null, errorMessage: null },
+  { id: "dv3", timestamp: "2025-02-15T09:00:00Z", success: false, checks: { botInstalled: true, manageRolesPermission: false, roleExists: true, botRoleHierarchy: false }, errorCode: "DISCORD_MANAGE_ROLES_MISSING", errorMessage: "Botに「ロールの管理」権限がありません" },
+  { id: "dv4", timestamp: "2025-02-10T16:00:00Z", success: false, checks: { botInstalled: false, manageRolesPermission: false, roleExists: false, botRoleHierarchy: false }, errorCode: "DISCORD_GUILD_ACCESS_DENIED", errorMessage: "Botがサーバーにアクセスできません" },
+  { id: "dv5", timestamp: "2025-02-05T11:00:00Z", success: true, checks: { botInstalled: true, manageRolesPermission: true, roleExists: true, botRoleHierarchy: true }, errorCode: null, errorMessage: null },
+];
 
 // ── System Announcements for Seller ──
 export const mockSellerAnnouncements = [
@@ -363,48 +286,17 @@ export type BuyerDiscordStatus = "linked" | "unlinked" | "failed";
 export type BuyerRoleStatus = "granted" | "pending" | "revoked" | "error";
 
 export interface BuyerPlan {
-  id: string;
-  planName: string;
-  sellerName: string;
-  planType: PlanType;
-  price: number;
-  currency: string;
-  billingStatus: BuyerBillingStatus;
-  discordStatus: BuyerDiscordStatus;
-  discordUsername: string;
-  roleStatus: BuyerRoleStatus;
-  roleName: string;
-  guildName: string;
-  nextBillingDate: string | null;
-  purchasedAt: string;
-  expiresAt: string | null;
+  id: string; planName: string; sellerName: string; planType: PlanType; price: number;
+  currency: string; billingStatus: BuyerBillingStatus; discordStatus: BuyerDiscordStatus;
+  discordUsername: string; roleStatus: BuyerRoleStatus; roleName: string; guildName: string;
+  nextBillingDate: string | null; purchasedAt: string; expiresAt: string | null;
 }
 
 export const mockBuyerPlans: BuyerPlan[] = [
-  {
-    id: "bp1", planName: "プレミアム会員", sellerName: "星野アイ", planType: "subscription",
-    price: 2980, currency: "JPY", billingStatus: "active", discordStatus: "linked",
-    discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "プレミアム",
-    guildName: "星野ファンクラブ", nextBillingDate: "2025-03-01", purchasedAt: "2024-12-01", expiresAt: null,
-  },
-  {
-    id: "bp2", planName: "スタンダード会員", sellerName: "鈴木花子", planType: "subscription",
-    price: 980, currency: "JPY", billingStatus: "cancel_scheduled", discordStatus: "linked",
-    discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "スタンダード",
-    guildName: "はなちゃんねる", nextBillingDate: "2025-03-15", purchasedAt: "2025-01-15", expiresAt: "2025-03-15",
-  },
-  {
-    id: "bp3", planName: "ワンタイムパス（30日）", sellerName: "佐藤美咲", planType: "one_time",
-    price: 500, currency: "JPY", billingStatus: "expired", discordStatus: "linked",
-    discordUsername: "user_taro#1234", roleStatus: "revoked", roleName: "お試し",
-    guildName: "みさきのお部屋", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: "2025-01-31",
-  },
-  {
-    id: "bp4", planName: "VIP会員", sellerName: "伊藤さくら", planType: "subscription",
-    price: 9800, currency: "JPY", billingStatus: "payment_failed", discordStatus: "linked",
-    discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "VIP",
-    guildName: "さくらファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: null,
-  },
+  { id: "bp1", planName: "プレミアム会員", sellerName: "星野アイ", planType: "subscription", price: 2980, currency: "JPY", billingStatus: "active", discordStatus: "linked", discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "プレミアム", guildName: "星野ファンクラブ", nextBillingDate: "2025-03-01", purchasedAt: "2024-12-01", expiresAt: null },
+  { id: "bp2", planName: "スタンダード会員", sellerName: "鈴木花子", planType: "subscription", price: 980, currency: "JPY", billingStatus: "cancel_scheduled", discordStatus: "linked", discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "スタンダード", guildName: "はなちゃんねる", nextBillingDate: "2025-03-15", purchasedAt: "2025-01-15", expiresAt: "2025-03-15" },
+  { id: "bp3", planName: "ワンタイムパス（30日）", sellerName: "佐藤美咲", planType: "one_time", price: 500, currency: "JPY", billingStatus: "expired", discordStatus: "linked", discordUsername: "user_taro#1234", roleStatus: "revoked", roleName: "お試し", guildName: "みさきのお部屋", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: "2025-01-31" },
+  { id: "bp4", planName: "VIP会員", sellerName: "伊藤さくら", planType: "subscription", price: 9800, currency: "JPY", billingStatus: "payment_failed", discordStatus: "linked", discordUsername: "user_taro#1234", roleStatus: "granted", roleName: "VIP", guildName: "さくらファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: null },
 ];
 
 export const buyerBillingStatusLabel: Record<BuyerBillingStatus, string> = {
@@ -423,36 +315,15 @@ export const buyerRoleStatusVariant: Record<BuyerRoleStatus, "default" | "second
 
 // Alias for services/mockApi compatibility (uses MembershipStatus from types)
 export const mockBuyerMemberships = [
-  {
-    id: "bp1", planName: "プレミアム会員", sellerName: "星野アイ", planType: "subscription" as const,
-    price: 2980, currency: "JPY", status: "active" as const, discordLinkStatus: "linked" as const,
-    discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "プレミアム",
-    guildName: "星野ファンクラブ", nextBillingDate: "2025-03-01", purchasedAt: "2024-12-01", expiresAt: null,
-  },
-  {
-    id: "bp2", planName: "スタンダード会員", sellerName: "鈴木花子", planType: "subscription" as const,
-    price: 980, currency: "JPY", status: "cancel_scheduled" as const, discordLinkStatus: "linked" as const,
-    discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "スタンダード",
-    guildName: "はなちゃんねる", nextBillingDate: "2025-03-15", purchasedAt: "2025-01-15", expiresAt: "2025-03-15",
-  },
-  {
-    id: "bp3", planName: "ワンタイムパス（30日）", sellerName: "佐藤美咲", planType: "one_time" as const,
-    price: 500, currency: "JPY", status: "expired" as const, discordLinkStatus: "linked" as const,
-    discordUsername: "user_taro#1234", roleStatus: "revoked" as const, roleName: "お試し",
-    guildName: "みさきのお部屋", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: "2025-01-31",
-  },
-  {
-    id: "bp4", planName: "VIP会員", sellerName: "伊藤さくら", planType: "subscription" as const,
-    price: 9800, currency: "JPY", status: "payment_failed" as const, discordLinkStatus: "linked" as const,
-    discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "VIP",
-    guildName: "さくらファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: null,
-  },
-  {
-    id: "bp5", planName: "初心者パス", sellerName: "渡辺ゆう", planType: "subscription" as const,
-    price: 500, currency: "JPY", status: "pending_discord" as const, discordLinkStatus: "not_linked" as const,
-    discordUsername: "", roleStatus: "pending" as const, roleName: "初心者",
-    guildName: "ゆうちゃんサロン", nextBillingDate: "2025-03-25", purchasedAt: "2025-02-25", expiresAt: null,
-  },
+  { id: "bp1", planName: "プレミアム会員", sellerName: "星野アイ", planType: "subscription" as const, price: 2980, currency: "JPY", status: "active" as const, discordLinkStatus: "linked" as const, discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "プレミアム", guildName: "星野ファンクラブ", nextBillingDate: "2025-03-01", purchasedAt: "2024-12-01", expiresAt: null },
+  { id: "bp2", planName: "スタンダード会員", sellerName: "鈴木花子", planType: "subscription" as const, price: 980, currency: "JPY", status: "cancel_scheduled" as const, discordLinkStatus: "linked" as const, discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "スタンダード", guildName: "はなちゃんねる", nextBillingDate: "2025-03-15", purchasedAt: "2025-01-15", expiresAt: "2025-03-15" },
+  { id: "bp3", planName: "ワンタイムパス（30日）", sellerName: "佐藤美咲", planType: "one_time" as const, price: 500, currency: "JPY", status: "expired" as const, discordLinkStatus: "linked" as const, discordUsername: "user_taro#1234", roleStatus: "revoked" as const, roleName: "お試し", guildName: "みさきのお部屋", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: "2025-01-31" },
+  { id: "bp4", planName: "VIP会員", sellerName: "伊藤さくら", planType: "subscription" as const, price: 9800, currency: "JPY", status: "payment_failed" as const, discordLinkStatus: "linked" as const, discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "VIP", guildName: "さくらファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: null },
+  { id: "bp5", planName: "初心者パス", sellerName: "渡辺ゆう", planType: "subscription" as const, price: 500, currency: "JPY", status: "pending_discord" as const, discordLinkStatus: "not_linked" as const, discordUsername: "", roleStatus: "pending" as const, roleName: "初心者", guildName: "ゆうちゃんサロン", nextBillingDate: "2025-03-25", purchasedAt: "2025-02-25", expiresAt: null },
+  // Abnormal: grace_period
+  { id: "bp6", planName: "プレミアム会員", sellerName: "松本ひかり", planType: "subscription" as const, price: 2980, currency: "JPY", status: "grace_period" as const, discordLinkStatus: "linked" as const, discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "プレミアム", guildName: "ひかりサロン", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: null },
+  // Abnormal: refunded
+  { id: "bp7", planName: "ワンタイムパス（30日）", sellerName: "星野アイ", planType: "one_time" as const, price: 500, currency: "JPY", status: "refunded" as const, discordLinkStatus: "linked" as const, discordUsername: "user_taro#1234", roleStatus: "revoked" as const, roleName: "お試し", guildName: "星野ファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: "2025-02-10" },
 ];
 
 // ── Computed Stats ──
@@ -476,30 +347,16 @@ export const mockSellerStats = {
 // ── Helpers ──
 export const formatCurrency = (amount: number) => `¥${amount.toLocaleString()}`;
 
-export const tenantStatusLabel: Record<TenantStatus, string> = {
-  trial: "試用中", active: "契約中", suspended: "停止中", canceled: "解約済",
-};
-export const tenantStatusVariant: Record<TenantStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  active: "default", trial: "secondary", suspended: "destructive", canceled: "outline",
-};
+export const tenantStatusLabel: Record<TenantStatus, string> = { trial: "試用中", active: "契約中", suspended: "停止中", canceled: "解約済" };
+export const tenantStatusVariant: Record<TenantStatus, "default" | "secondary" | "destructive" | "outline"> = { active: "default", trial: "secondary", suspended: "destructive", canceled: "outline" };
 
-export const stripeStatusLabel: Record<StripeConnectStatus, string> = {
-  not_started: "未開始", pending: "審査中", verified: "認証済", restricted: "制限中",
-};
+export const stripeStatusLabel: Record<StripeConnectStatus, string> = { not_started: "未開始", pending: "審査中", verified: "認証済", restricted: "制限中" };
 
-export const retryJobTypeLabel: Record<RetryJobType, string> = {
-  webhook: "Webhook", discord: "Discord", sync: "同期",
-};
-export const retryStatusLabel: Record<RetryStatus, string> = {
-  pending: "待機中", paused: "保留", exhausted: "上限到達",
-};
+export const retryJobTypeLabel: Record<RetryJobType, string> = { webhook: "Webhook", discord: "Discord", sync: "同期" };
+export const retryStatusLabel: Record<RetryStatus, string> = { pending: "待機中", paused: "保留", exhausted: "上限到達" };
 
-export const announcementStatusLabel: Record<AnnouncementStatus, string> = {
-  draft: "下書き", published: "公開中", ended: "終了",
-};
-export const announcementSeverityLabel: Record<AnnouncementSeverity, string> = {
-  info: "情報", warning: "注意", critical: "重大",
-};
+export const announcementStatusLabel: Record<AnnouncementStatus, string> = { draft: "下書き", published: "公開中", ended: "終了" };
+export const announcementSeverityLabel: Record<AnnouncementSeverity, string> = { info: "情報", warning: "注意", critical: "重大" };
 
 export const formatDateTimeJP = (iso: string) => {
   if (!iso) return "—";
