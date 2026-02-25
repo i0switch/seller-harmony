@@ -421,6 +421,40 @@ export const buyerRoleStatusVariant: Record<BuyerRoleStatus, "default" | "second
   granted: "default", pending: "secondary", revoked: "outline", error: "destructive",
 };
 
+// Alias for services/mockApi compatibility (uses MembershipStatus from types)
+export const mockBuyerMemberships = [
+  {
+    id: "bp1", planName: "プレミアム会員", sellerName: "星野アイ", planType: "subscription" as const,
+    price: 2980, currency: "JPY", status: "active" as const, discordLinkStatus: "linked" as const,
+    discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "プレミアム",
+    guildName: "星野ファンクラブ", nextBillingDate: "2025-03-01", purchasedAt: "2024-12-01", expiresAt: null,
+  },
+  {
+    id: "bp2", planName: "スタンダード会員", sellerName: "鈴木花子", planType: "subscription" as const,
+    price: 980, currency: "JPY", status: "cancel_scheduled" as const, discordLinkStatus: "linked" as const,
+    discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "スタンダード",
+    guildName: "はなちゃんねる", nextBillingDate: "2025-03-15", purchasedAt: "2025-01-15", expiresAt: "2025-03-15",
+  },
+  {
+    id: "bp3", planName: "ワンタイムパス（30日）", sellerName: "佐藤美咲", planType: "one_time" as const,
+    price: 500, currency: "JPY", status: "expired" as const, discordLinkStatus: "linked" as const,
+    discordUsername: "user_taro#1234", roleStatus: "revoked" as const, roleName: "お試し",
+    guildName: "みさきのお部屋", nextBillingDate: null, purchasedAt: "2025-01-01", expiresAt: "2025-01-31",
+  },
+  {
+    id: "bp4", planName: "VIP会員", sellerName: "伊藤さくら", planType: "subscription" as const,
+    price: 9800, currency: "JPY", status: "payment_failed" as const, discordLinkStatus: "linked" as const,
+    discordUsername: "user_taro#1234", roleStatus: "granted" as const, roleName: "VIP",
+    guildName: "さくらファンクラブ", nextBillingDate: null, purchasedAt: "2025-02-01", expiresAt: null,
+  },
+  {
+    id: "bp5", planName: "初心者パス", sellerName: "渡辺ゆう", planType: "subscription" as const,
+    price: 500, currency: "JPY", status: "pending_discord" as const, discordLinkStatus: "not_linked" as const,
+    discordUsername: "", roleStatus: "pending" as const, roleName: "初心者",
+    guildName: "ゆうちゃんサロン", nextBillingDate: "2025-03-25", purchasedAt: "2025-02-25", expiresAt: null,
+  },
+];
+
 // ── Computed Stats ──
 export const mockPlatformStats = {
   activeTenants: mockTenants.filter((t) => t.status === "active").length,

@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { mockAnnouncements, announcementStatusLabel, announcementSeverityLabel, formatDateJP, type Announcement, type AnnouncementSeverity, type AnnouncementTarget, type AnnouncementStatus } from "@/lib/mockData";
+import { mockAnnouncements, announcementStatusLabel, announcementSeverityLabel, formatDateJP } from "@/lib/mockData";
+import type { Announcement, AnnouncementSeverity, AnnouncementTarget, AnnouncementStatus } from "@/lib/mockData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Eye, Edit, X } from "lucide-react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
+import { Plus, Eye, Edit } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { EmptyState } from "@/components/shared";
+import { useToast } from "@/hooks/use-toast";
 
 const statusVariant: Record<AnnouncementStatus, "default" | "secondary" | "outline"> = {
   published: "default", draft: "secondary", ended: "outline",
@@ -31,15 +32,19 @@ export default function PlatformAnnouncements() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editData, setEditData] = useState<Omit<Announcement, "id" | "createdAt" | "updatedAt">>(emptyAnn);
   const [previewData, setPreviewData] = useState<Announcement | null>(null);
+  const { toast } = useToast();
 
-  const filtered = statusFilter === "all"
-    ? announcements
-    : announcements.filter((a) => a.status === statusFilter);
+  const filtered = statusFilter === "all" ? announcements : announcements.filter((a) => a.status === statusFilter);
 
   const openCreate = () => { setEditData(emptyAnn); setEditOpen(true); };
   const openEdit = (a: Announcement) => {
     setEditData({ title: a.title, body: a.body, severity: a.severity, targetScope: a.targetScope, status: a.status, startsAt: a.startsAt, endsAt: a.endsAt, isPublished: a.isPublished });
     setEditOpen(true);
+  };
+
+  const handleSave = () => {
+    setEditOpen(false);
+    toast({ title: "保存しました", description: `「${editData.title}」を保存しました` });
   };
 
   return (
@@ -49,7 +54,6 @@ export default function PlatformAnnouncements() {
         <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4 mr-1" />新規作成</Button>
       </div>
 
-      {/* Filter */}
       <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as AnnouncementStatus | "all")}>
         <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -60,9 +64,8 @@ export default function PlatformAnnouncements() {
         </SelectContent>
       </Select>
 
-      {/* List */}
       {filtered.length === 0 ? (
-        <div className="glass-card rounded-xl p-8 text-center text-muted-foreground">お知らせがありません</div>
+        <EmptyState title="お知らせがありません" />
       ) : (
         <div className="space-y-3">
           {filtered.map((a) => (
@@ -141,16 +144,13 @@ export default function PlatformAnnouncements() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Switch
-                checked={editData.isPublished}
-                onCheckedChange={(v) => setEditData({ ...editData, isPublished: v })}
-              />
+              <Switch checked={editData.isPublished} onCheckedChange={(v) => setEditData({ ...editData, isPublished: v })} />
               <Label>公開する</Label>
             </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditOpen(false)}>キャンセル</Button>
-            <Button onClick={() => setEditOpen(false)}>保存</Button>
+            <Button onClick={handleSave}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

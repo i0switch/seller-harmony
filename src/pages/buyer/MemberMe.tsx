@@ -1,39 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import {
   CreditCard, MessageCircle, RefreshCw, Shield, ExternalLink, AlertTriangle,
   ChevronDown, ChevronUp, Clock, User,
 } from "lucide-react";
+import { ConfirmDialog, EmptyState, LoadingSkeleton, ErrorBanner } from "@/components/shared";
+import { buyerApi } from "@/services/mockApi";
 import {
-  mockBuyerPlans, BuyerPlan, formatCurrency, formatDateJP,
-  buyerBillingStatusLabel, buyerBillingStatusVariant,
-  buyerDiscordStatusLabel, buyerRoleStatusLabel, buyerRoleStatusVariant,
-} from "@/lib/mockData";
+  BuyerMembership, membershipStatusLabel, membershipStatusVariant,
+  discordLinkStatusLabel, discordLinkStatusVariant,
+  roleStatusLabel, roleStatusVariant,
+  formatCurrency, formatDateJP,
+} from "@/types";
+import { useToast } from "@/hooks/use-toast";
 
-function PlanCard({ plan }: { plan: BuyerPlan }) {
+function PlanCard({ plan }: { plan: BuyerMembership }) {
   const [expanded, setExpanded] = useState(false);
+  const { toast } = useToast();
 
-  const needsAction = plan.billingStatus === "payment_failed" || plan.discordStatus !== "linked" || plan.roleStatus === "error";
+  const needsAction = plan.status === "payment_failed" || plan.status === "pending_discord" ||
+    plan.discordLinkStatus !== "linked" || plan.roleStatus === "failed";
+
+  const handleRoleRequest = () => {
+    buyerApi.requestRoleGrant(plan.id).then(() => {
+      toast({ title: "リクエスト送信", description: "ロール再付与リクエストを送信しました。" });
+    });
+  };
 
   return (
     <div className="glass-card rounded-xl overflow-hidden">
-      {/* Header */}
       <div className="p-4 space-y-2">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <h3 className="font-bold">{plan.planName}</h3>
             <p className="text-xs text-muted-foreground">{plan.sellerName}</p>
           </div>
-          <Badge variant={buyerBillingStatusVariant[plan.billingStatus]}>
-            {buyerBillingStatusLabel[plan.billingStatus]}
+          <Badge variant={membershipStatusVariant[plan.status]}>
+            {membershipStatusLabel[plan.status]}
           </Badge>
         </div>
 
@@ -46,9 +51,10 @@ function PlanCard({ plan }: { plan: BuyerPlan }) {
           <div className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/5 rounded-lg p-2">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>
-              {plan.billingStatus === "payment_failed" && "決済に失敗しています。お支払い情報を確認してください。"}
-              {plan.discordStatus !== "linked" && plan.billingStatus !== "payment_failed" && "Discord連携が必要です。"}
-              {plan.roleStatus === "error" && plan.discordStatus === "linked" && plan.billingStatus !== "payment_failed" && "ロール付与でエラーが発生しています。"}
+              {plan.status === "pending_discord" && "Discord連携をして権限を受け取ってください。"}
+              {plan.status === "payment_failed" && "決済に失敗しています。お支払い情報を確認してください。"}
+              {plan.status !== "pending_discord" && plan.status !== "payment_failed" && plan.discordLinkStatus !== "linked" && "Discord連携が必要です。"}
+              {plan.roleStatus === "failed" && plan.discordLinkStatus === "linked" && plan.status !== "payment_failed" && plan.status !== "pending_discord" && "ロール付与でエラーが発生しています。"}
             </span>
           </div>
         )}
@@ -62,7 +68,6 @@ function PlanCard({ plan }: { plan: BuyerPlan }) {
         </button>
       </div>
 
-      {/* Expanded Details */}
       {expanded && (
         <div className="border-t px-4 py-3 space-y-3">
           <div className="space-y-2 text-sm">
@@ -70,9 +75,15 @@ function PlanCard({ plan }: { plan: BuyerPlan }) {
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <MessageCircle className="h-3.5 w-3.5" /> Discord
               </span>
-              <span className="font-medium">
-                {plan.discordStatus === "linked" ? plan.discordUsername : buyerDiscordStatusLabel[plan.discordStatus]}
-              </span>
+              <div className="flex items-center gap-1.5">
+                {plan.discordLinkStatus === "linked" ? (
+                  <span className="font-medium">{plan.discordUsername}</span>
+                ) : (
+                  <Badge variant={discordLinkStatusVariant[plan.discordLinkStatus]}>
+                    {discordLinkStatusLabel[plan.discordLinkStatus]}
+                  </Badge>
+                )}
+              </div>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground flex items-center gap-1.5">
@@ -80,8 +91,8 @@ function PlanCard({ plan }: { plan: BuyerPlan }) {
               </span>
               <div className="flex items-center gap-1.5">
                 {plan.roleStatus === "granted" && <span className="font-medium">{plan.roleName}</span>}
-                <Badge variant={buyerRoleStatusVariant[plan.roleStatus]}>
-                  {buyerRoleStatusLabel[plan.roleStatus]}
+                <Badge variant={roleStatusVariant[plan.roleStatus]}>
+                  {roleStatusLabel[plan.roleStatus]}
                 </Badge>
               </div>
             </div>
@@ -111,23 +122,25 @@ function PlanCard({ plan }: { plan: BuyerPlan }) {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="space-y-2 pt-1">
-            {plan.discordStatus !== "linked" && plan.billingStatus !== "expired" && plan.billingStatus !== "refunded" && (
+            {(plan.discordLinkStatus === "not_linked" || plan.discordLinkStatus === "relink_required" || plan.discordLinkStatus === "token_expired") &&
+              plan.status !== "expired" && plan.status !== "refunded" && (
               <Button asChild size="sm" className="w-full">
                 <Link to="/buyer/discord/confirm">
                   <MessageCircle className="h-4 w-4 mr-1" /> Discord連携する
                 </Link>
               </Button>
             )}
-            {plan.roleStatus === "error" && (
-              <Button variant="outline" size="sm" className="w-full">
+            {plan.roleStatus === "failed" && (
+              <Button variant="outline" size="sm" className="w-full" onClick={handleRoleRequest}>
                 <RefreshCw className="h-4 w-4 mr-1" /> ロール再付与をリクエスト
               </Button>
             )}
-            {plan.discordStatus === "linked" && plan.roleStatus !== "granted" && plan.roleStatus !== "error" && (
-              <Button variant="outline" size="sm" className="w-full">
-                <RefreshCw className="h-4 w-4 mr-1" /> 再連携する
+            {plan.discordLinkStatus === "linked" && plan.roleStatus !== "granted" && plan.roleStatus !== "failed" && (
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link to="/buyer/discord/confirm">
+                  <RefreshCw className="h-4 w-4 mr-1" /> 再連携する
+                </Link>
               </Button>
             )}
           </div>
@@ -138,20 +151,30 @@ function PlanCard({ plan }: { plan: BuyerPlan }) {
 }
 
 export default function MemberMe() {
-  const [isLoading] = useState(false);
-  const plans = mockBuyerPlans;
-  const activePlans = plans.filter(p => p.billingStatus === "active" || p.billingStatus === "grace_period" || p.billingStatus === "cancel_scheduled" || p.billingStatus === "payment_failed");
-  const pastPlans = plans.filter(p => p.billingStatus === "expired" || p.billingStatus === "refunded");
+  const [memberships, setMemberships] = useState<BuyerMembership[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-48 rounded-xl" />
-        <Skeleton className="h-48 rounded-xl" />
-      </div>
-    );
-  }
+  const load = () => {
+    setIsLoading(true);
+    setError(null);
+    buyerApi.getMemberships()
+      .then(setMemberships)
+      .catch(e => setError(e.message))
+      .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  if (isLoading) return <LoadingSkeleton rows={3} />;
+  if (error) return <ErrorBanner message={error} onRetry={load} />;
+
+  const activePlans = memberships.filter(p =>
+    ["active", "grace_period", "cancel_scheduled", "payment_failed", "pending_discord"].includes(p.status)
+  );
+  const pastPlans = memberships.filter(p =>
+    ["expired", "refunded", "canceled"].includes(p.status)
+  );
 
   return (
     <div className="space-y-5">
@@ -168,64 +191,43 @@ export default function MemberMe() {
         </div>
       </div>
 
-      {/* Active Plans */}
       {activePlans.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground px-1">参加中のプラン</h2>
-          {activePlans.map(plan => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
+          {activePlans.map(plan => <PlanCard key={plan.id} plan={plan} />)}
         </div>
       )}
 
-      {/* Past Plans */}
       {pastPlans.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground px-1">過去のプラン</h2>
-          {pastPlans.map(plan => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
+          {pastPlans.map(plan => <PlanCard key={plan.id} plan={plan} />)}
         </div>
       )}
 
-      {/* Empty State */}
-      {plans.length === 0 && (
-        <div className="glass-card rounded-xl p-8 text-center space-y-3">
-          <CreditCard className="h-12 w-12 mx-auto text-muted-foreground/40" />
-          <p className="text-muted-foreground">参加中のプランはありません</p>
-        </div>
+      {memberships.length === 0 && (
+        <EmptyState icon={CreditCard} title="参加中のプランはありません" />
       )}
 
-      {/* Bottom Actions */}
       <div className="space-y-2">
         <Button variant="outline" className="w-full" asChild>
           <a href="https://billing.stripe.com/p/login/test" target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-4 w-4 mr-2" />
-            領収書・請求情報を確認する
+            <ExternalLink className="h-4 w-4 mr-2" /> 領収書・請求情報を確認する
           </a>
         </Button>
 
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
+        <ConfirmDialog
+          trigger={
             <Button variant="outline" className="w-full text-destructive hover:text-destructive">
               アカウント削除
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>アカウントを削除しますか？</AlertDialogTitle>
-              <AlertDialogDescription>
-                この操作は取り消せません。すべてのプランが解約され、Discord連携も解除されます。
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>キャンセル</AlertDialogCancel>
-              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                削除する
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          }
+          title="アカウントを削除しますか？"
+          description="この操作は取り消せません。すべてのプランが解約され、Discord連携も解除されます。"
+          confirmLabel="削除する"
+          destructive
+          onConfirm={() => {}}
+        />
       </div>
     </div>
   );
