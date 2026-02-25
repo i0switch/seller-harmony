@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { MessageCircle, ArrowLeft, CheckCircle, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
 
+import { supabase } from "@/lib/supabase";
+
 type CheckStatus = "idle" | "checking" | "success" | "error";
 
 interface ValidationResult {
@@ -31,33 +33,44 @@ export default function OnboardingDiscord() {
   const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
   const [validation, setValidation] = useState<ValidationResult | null>(null);
 
-  const runValidation = () => {
-    if (!guildId.trim()) return;
+  const runValidation = async () => {
+    if (!guildId.trim() || !roleId.trim()) {
+      alert("サーバーIDと役割(Role)IDを入力してください");
+      return;
+    }
     setCheckStatus("checking");
 
-    // Mock validation with delay
-    setTimeout(() => {
-      // Success scenario if guild ID looks valid
-      if (guildId.length >= 10) {
+    try {
+      const { data, error } = await supabase.functions.invoke('discord-bot', {
+        body: { action: 'validate_bot_permission', guild_id: guildId.trim(), role_id: roleId.trim() }
+      });
+
+      if (error || !data) throw new Error(error?.message || "Function error");
+      if (data.error) throw new Error(data.error);
+
+      if (data.status === "ok") {
         setValidation({
-          botInstalled: true,
-          manageRoles: true,
-          roleExists: !!roleId,
-          roleHierarchy: !!roleId,
-          errorCode: roleId ? null : "DISCORD_ROLE_NOT_FOUND",
+          botInstalled: true, manageRoles: true, roleExists: true, roleHierarchy: true, errorCode: null
         });
-        setCheckStatus(roleId ? "success" : "error");
+        setCheckStatus("success");
       } else {
         setValidation({
-          botInstalled: false,
-          manageRoles: false,
-          roleExists: false,
-          roleHierarchy: false,
-          errorCode: "DISCORD_GUILD_ACCESS_DENIED",
+          botInstalled: true, manageRoles: true, roleExists: true, roleHierarchy: false, errorCode: "DISCORD_ROLE_HIERARCHY_INVALID"
         });
         setCheckStatus("error");
       }
-    }, 1500);
+    } catch (err: any) {
+      console.error(err);
+      let code = "DISCORD_GUILD_ACCESS_DENIED";
+      if (err.message?.includes("Role not found")) code = "DISCORD_ROLE_NOT_FOUND";
+
+      setValidation({
+        botInstalled: err.message?.includes("Role not found"),
+        manageRoles: err.message?.includes("Role not found"),
+        roleExists: false, roleHierarchy: false, errorCode: code
+      });
+      setCheckStatus("error");
+    }
   };
 
   const CheckItem = ({ ok, label }: { ok: boolean; label: string }) => (

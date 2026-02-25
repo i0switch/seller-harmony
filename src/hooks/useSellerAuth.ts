@@ -1,21 +1,28 @@
-// Seller auth hook with onboarding step tracking
-export type OnboardingStep = "profile" | "stripe" | "discord" | "complete";
+import { useAuth, OnboardingStep } from "@/contexts/AuthContext";
 
 const ONBOARDING_STEPS: OnboardingStep[] = ["profile", "stripe", "discord", "complete"];
 
 export function useSellerAuth() {
-  const isLoggedIn = localStorage.getItem("seller_logged_in") === "true";
-  const isOnboarded = localStorage.getItem("seller_onboarded") === "true";
-  const currentStep = (localStorage.getItem("seller_onboarding_step") as OnboardingStep) || "profile";
+  const {
+    session,
+    role,
+    isLoading,
+    sellerOnboardingStep: currentStep,
+    setSellerOnboardingStep,
+    sellerLogin: supabaseLogin,
+    sellerSignup: supabaseSignup,
+    logout
+  } = useAuth();
+
+  const isLoggedIn = !!session && role === "seller";
+  const isOnboarded = currentStep === "complete";
 
   const completeOnboarding = () => {
-    localStorage.setItem("seller_onboarded", "true");
-    localStorage.setItem("seller_logged_in", "true");
-    localStorage.setItem("seller_onboarding_step", "complete");
+    setSellerOnboardingStep("complete");
   };
 
   const setOnboardingStep = (step: OnboardingStep) => {
-    localStorage.setItem("seller_onboarding_step", step);
+    setSellerOnboardingStep(step);
   };
 
   const getNextStep = (): OnboardingStep | null => {
@@ -26,28 +33,23 @@ export function useSellerAuth() {
   const canAccessStep = (step: OnboardingStep): boolean => {
     const targetIdx = ONBOARDING_STEPS.indexOf(step);
     const currentIdx = ONBOARDING_STEPS.indexOf(currentStep);
-    // Can access current step and any completed step (before current)
-    return targetIdx <= currentIdx;
+    return targetIdx <= currentIdx || isOnboarded;
   };
 
-  const login = () => {
-    localStorage.setItem("seller_logged_in", "true");
-    localStorage.setItem("seller_onboarded", "true");
-    localStorage.setItem("seller_onboarding_step", "complete");
+  const login = async (email: string, pass: string) => {
+    return await supabaseLogin(email, pass);
   };
 
-  const signup = () => {
-    localStorage.setItem("seller_logged_in", "true");
-    localStorage.removeItem("seller_onboarded");
-    localStorage.setItem("seller_onboarding_step", "profile");
-  };
-
-  const logout = () => {
-    localStorage.removeItem("seller_logged_in");
+  const signup = async (email: string, pass: string) => {
+    const res = await supabaseSignup(email, pass);
+    if (!res.error) {
+      setSellerOnboardingStep("profile");
+    }
+    return res;
   };
 
   return {
-    isOnboarded, isLoggedIn, currentStep,
+    isOnboarded, isLoggedIn, isLoading, currentStep,
     completeOnboarding, setOnboardingStep, getNextStep, canAccessStep,
     login, signup, logout,
   };

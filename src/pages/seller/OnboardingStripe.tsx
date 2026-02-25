@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { CreditCard, ExternalLink, ArrowLeft } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
 
+import { supabase } from "@/lib/supabase";
+
 type StripeState = "not_started" | "pending" | "verified" | "restricted";
 const stateLabel: Record<StripeState, string> = { not_started: "未開始", pending: "審査中", verified: "有効", restricted: "制限あり" };
 const stateVariant: Record<StripeState, "outline" | "secondary" | "default" | "destructive"> = { not_started: "outline", pending: "secondary", verified: "default", restricted: "destructive" };
@@ -12,8 +14,26 @@ const stateVariant: Record<StripeState, "outline" | "secondary" | "default" | "d
 export default function OnboardingStripe() {
   const navigate = useNavigate();
   const [state, setState] = useState<StripeState>("not_started");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const startOnboarding = () => setState("pending");
+  const startOnboarding = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-onboarding');
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        setState("pending");
+      }
+    } catch (err) {
+      console.error("Stripe onboarding failed:", err);
+      alert("Stripe接続処理に失敗しました。後でもう一度お試しください。");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const mockComplete = () => setState("verified");
 
   return (
@@ -33,8 +53,8 @@ export default function OnboardingStripe() {
         {state === "not_started" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Stripe Expressを使用して安全にKYCと口座登録を行います</p>
-            <Button className="w-full" onClick={startOnboarding}>
-              <ExternalLink className="h-4 w-4 mr-2" /> Stripeオンボーディングを開始
+            <Button className="w-full" onClick={startOnboarding} disabled={isLoading}>
+              <ExternalLink className="h-4 w-4 mr-2" /> {isLoading ? "Stripeを開く..." : "Stripeオンボーディングを開始"}
             </Button>
           </div>
         )}
@@ -42,8 +62,8 @@ export default function OnboardingStripe() {
         {state === "pending" && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Stripeで本人確認・口座登録を完了してください</p>
-            <Button variant="outline" className="w-full" onClick={startOnboarding}>
-              <ExternalLink className="h-4 w-4 mr-2" /> Stripeオンボーディングを再開
+            <Button variant="outline" className="w-full" onClick={startOnboarding} disabled={isLoading}>
+              <ExternalLink className="h-4 w-4 mr-2" /> {isLoading ? "Stripeを開く..." : "Stripeオンボーディングを再開"}
             </Button>
             <Button size="sm" variant="ghost" onClick={mockComplete} className="text-xs text-muted-foreground">
               （デモ用: 完了にする）

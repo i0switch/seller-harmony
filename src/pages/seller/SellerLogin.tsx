@@ -12,13 +12,17 @@ export default function SellerLogin() {
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
       setError("メールアドレスとパスワードを入力してください");
       return;
     }
-    login();
+    const res = await login(email, password);
+    if (res.error) {
+      setError("ログインに失敗しました。メールアドレスとパスワードを確認してください。");
+      return;
+    }
     navigate("/seller/dashboard");
   };
 

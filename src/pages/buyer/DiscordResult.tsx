@@ -1,27 +1,75 @@
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle, XCircle, AlertTriangle, MessageCircle, RotateCcw, Mail, ExternalLink } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, MessageCircle, RotateCcw, Mail, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/lib/supabase";
 
-const mockSuccessResult = {
-  discordUsername: "user_taro#1234",
-  guildName: "星野ファンクラブ",
-  roleName: "プレミアム",
-  planName: "プレミアム会員",
-};
-
-const mockFailureResult = {
-  errorMessage: "Discordサーバーへの参加に失敗しました。サーバーの招待設定を確認してください。",
-  errorCode: "DISCORD_GUILD_ACCESS_DENIED",
-  sellerContact: "support@hoshino-fanclub.com",
-};
+interface DiscordAuthResult {
+  discordUsername: string;
+  guildName: string;
+  roleName: string;
+  planName: string;
+}
 
 export default function DiscordResult() {
   const [searchParams] = useSearchParams();
-  const status = searchParams.get("status") || "success";
+  const code = searchParams.get("code");
+  const errorParam = searchParams.get("error");
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [authResult, setAuthResult] = useState<DiscordAuthResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  if (status === "success") {
+  useEffect(() => {
+    if (errorParam) {
+      setErrorMessage("Discord認証がキャンセルされたか、エラーが発生しました。");
+      setStatus("error");
+      return;
+    }
+
+    if (!code) {
+      setErrorMessage("無効なリクエストです。認証コードが見つかりません。");
+      setStatus("error");
+      return;
+    }
+
+    const exchangeCode = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('discord-oauth', {
+          body: { code, redirect_uri: `${window.location.origin}/buyer/discord/result` }
+        });
+
+        if (error || !data) throw new Error(error?.message || "Function error");
+        if (data.error) throw new Error(data.error);
+
+        setAuthResult({
+          discordUsername: data.discord_user?.username || "Discord User",
+          guildName: "対象サーバー", // Usually we fetch from plan context
+          roleName: "該当ロール",
+          planName: "プラン",
+        });
+        setStatus("success");
+      } catch (err: any) {
+        console.error("OAuth exchange failed:", err);
+        setErrorMessage("Discordへの連携に失敗しました。もう一度お試しください。");
+        setStatus("error");
+      }
+    };
+
+    exchangeCode();
+  }, [code, errorParam]);
+
+  if (status === "loading") {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+        <p className="text-sm text-muted-foreground">Discordと連携しています...</p>
+      </div>
+    );
+  }
+
+  if (status === "success" && authResult) {
     return (
       <div className="space-y-5">
         {/* Success */}
@@ -40,19 +88,19 @@ export default function DiscordResult() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Discordアカウント</span>
-              <span className="font-medium">{mockSuccessResult.discordUsername}</span>
+              <span className="font-medium">{authResult.discordUsername}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">参加サーバー</span>
-              <span className="font-medium">{mockSuccessResult.guildName}</span>
+              <span className="font-medium">{authResult.guildName}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">付与ロール</span>
-              <Badge variant="default">{mockSuccessResult.roleName}</Badge>
+              <Badge variant="default">{authResult.roleName}</Badge>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">プラン</span>
-              <span className="font-medium">{mockSuccessResult.planName}</span>
+              <span className="font-medium">{authResult.planName}</span>
             </div>
           </div>
         </div>
@@ -63,7 +111,7 @@ export default function DiscordResult() {
           <div className="space-y-2 text-sm text-muted-foreground">
             <div className="flex items-start gap-2">
               <MessageCircle className="h-4 w-4 mt-0.5 text-accent shrink-0" />
-              <p>Discordアプリで「{mockSuccessResult.guildName}」サーバーを確認してください</p>
+              <p>Discordアプリで「{authResult.guildName}」サーバーを確認してください</p>
             </div>
             <div className="flex items-start gap-2">
               <ExternalLink className="h-4 w-4 mt-0.5 text-accent shrink-0" />
@@ -96,7 +144,7 @@ export default function DiscordResult() {
       <Alert variant="destructive">
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription className="text-sm">
-          {mockFailureResult.errorMessage}
+          {errorMessage || "予期せぬエラーが発生しました。"}
         </AlertDescription>
       </Alert>
 
@@ -109,7 +157,7 @@ export default function DiscordResult() {
         </ul>
         <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
           <span>エラーコード:</span>
-          <Badge variant="outline" className="font-mono text-xs">{mockFailureResult.errorCode}</Badge>
+          <Badge variant="outline" className="font-mono text-xs">OAUTH_FAILED</Badge>
         </div>
       </div>
 
@@ -130,7 +178,7 @@ export default function DiscordResult() {
             販売者へお問い合わせください。エラーコードをお伝えいただくとスムーズです。
           </p>
           <p className="text-xs font-mono text-muted-foreground">
-            {mockFailureResult.sellerContact}
+            contact@example.com
           </p>
         </div>
 

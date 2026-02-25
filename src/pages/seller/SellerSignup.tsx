@@ -25,10 +25,14 @@ export default function SellerSignup() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    signup();
+    const res = await signup(email, password);
+    if (res.error) {
+      setErrors({ ...errors, form: res.error.message });
+      return;
+    }
     navigate("/seller/onboarding/profile");
   };
 
@@ -40,6 +44,7 @@ export default function SellerSignup() {
           <p className="text-sm text-muted-foreground mt-1">ファンクラブを始めましょう</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {errors.form && <p className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">{errors.form}</p>}
           <div className="space-y-2">
             <Label>表示名</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="クリエイター名" />

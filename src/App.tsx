@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -46,58 +47,60 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
 
-          {/* Platform Admin */}
-          <Route path="/platform/login" element={<PlatformLogin />} />
-          <Route path="/platform" element={<PlatformLayout />}>
-            <Route path="dashboard" element={<PlatformDashboard />} />
-            <Route path="tenants" element={<PlatformTenants />} />
-            <Route path="tenants/:id" element={<PlatformTenantDetail />} />
-            <Route path="webhooks" element={<PlatformWebhooks />} />
-            <Route path="retry-queue" element={<PlatformRetryQueue />} />
-            <Route path="announcements" element={<PlatformAnnouncements />} />
-            <Route path="system-control" element={<PlatformSystemControl />} />
-          </Route>
+            {/* Platform Admin */}
+            <Route path="/platform/login" element={<PlatformLogin />} />
+            <Route path="/platform" element={<PlatformLayout />}>
+              <Route path="dashboard" element={<PlatformDashboard />} />
+              <Route path="tenants" element={<PlatformTenants />} />
+              <Route path="tenants/:id" element={<PlatformTenantDetail />} />
+              <Route path="webhooks" element={<PlatformWebhooks />} />
+              <Route path="retry-queue" element={<PlatformRetryQueue />} />
+              <Route path="announcements" element={<PlatformAnnouncements />} />
+              <Route path="system-control" element={<PlatformSystemControl />} />
+            </Route>
 
-          {/* Seller - standalone pages */}
-          <Route path="/seller/signup" element={<SellerSignup />} />
-          <Route path="/seller/login" element={<SellerLogin />} />
-          <Route path="/seller/onboarding/profile" element={<OnboardingProfile />} />
-          <Route path="/seller/onboarding/stripe" element={<OnboardingStripe />} />
-          <Route path="/seller/onboarding/discord" element={<OnboardingDiscord />} />
-          <Route path="/seller/onboarding/complete" element={<OnboardingComplete />} />
+            {/* Seller - standalone pages */}
+            <Route path="/seller/signup" element={<SellerSignup />} />
+            <Route path="/seller/login" element={<SellerLogin />} />
+            <Route path="/seller/onboarding/profile" element={<OnboardingProfile />} />
+            <Route path="/seller/onboarding/stripe" element={<OnboardingStripe />} />
+            <Route path="/seller/onboarding/discord" element={<OnboardingDiscord />} />
+            <Route path="/seller/onboarding/complete" element={<OnboardingComplete />} />
 
-          {/* Seller - dashboard layout */}
-          <Route path="/seller" element={<SellerLayout />}>
-            <Route path="dashboard" element={<SellerDashboard />} />
-            <Route path="plans" element={<SellerPlans />} />
-            <Route path="plans/new" element={<SellerPlanDetail />} />
-            <Route path="plans/:id" element={<SellerPlanDetail />} />
-            <Route path="members" element={<SellerMembers />} />
-            <Route path="members/:id" element={<SellerMemberDetail />} />
-            <Route path="crosscheck" element={<SellerCrosscheck />} />
-            <Route path="webhooks" element={<SellerWebhooks />} />
-            <Route path="settings/discord" element={<SellerDiscordSettings />} />
-          </Route>
+            {/* Seller - dashboard layout */}
+            <Route path="/seller" element={<SellerLayout />}>
+              <Route path="dashboard" element={<SellerDashboard />} />
+              <Route path="plans" element={<SellerPlans />} />
+              <Route path="plans/new" element={<SellerPlanDetail />} />
+              <Route path="plans/:id" element={<SellerPlanDetail />} />
+              <Route path="members" element={<SellerMembers />} />
+              <Route path="members/:id" element={<SellerMemberDetail />} />
+              <Route path="crosscheck" element={<SellerCrosscheck />} />
+              <Route path="webhooks" element={<SellerWebhooks />} />
+              <Route path="settings/discord" element={<SellerDiscordSettings />} />
+            </Route>
 
-          {/* Buyer */}
-          <Route element={<BuyerLayout />}>
-            <Route path="/checkout/success" element={<CheckoutSuccess />} />
-            <Route path="/buyer/discord/confirm" element={<DiscordConfirm />} />
-            <Route path="/buyer/discord/result" element={<DiscordResult />} />
-            <Route path="/member/me" element={<MemberMe />} />
-          </Route>
+            {/* Buyer */}
+            <Route element={<BuyerLayout />}>
+              <Route path="/checkout/success" element={<CheckoutSuccess />} />
+              <Route path="/buyer/discord/confirm" element={<DiscordConfirm />} />
+              <Route path="/buyer/discord/result" element={<DiscordResult />} />
+              <Route path="/member/me" element={<MemberMe />} />
+            </Route>
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

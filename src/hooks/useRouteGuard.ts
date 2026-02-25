@@ -1,21 +1,22 @@
-// Route guard hooks for each role
+import { useAuth } from "@/contexts/AuthContext";
 
 export function usePlatformAuth() {
-  const isLoggedIn = localStorage.getItem("platform_logged_in") === "true";
+  const { session, role, logout: globalLogout } = useAuth();
+  const isLoggedIn = !!session && role === "platform_admin";
 
-  const login = () => localStorage.setItem("platform_logged_in", "true");
-  const logout = () => localStorage.removeItem("platform_logged_in");
+  const login = () => { /* In reality, platform admin would securely login via a different route or specialized UI */ };
+  const logout = async () => { await globalLogout() };
 
   return { isLoggedIn, login, logout };
 }
 
 export function useBuyerAuth() {
-  // Buyer pages are generally accessible (linked from checkout/email)
-  // but we track if they have an active session
-  const hasSession = localStorage.getItem("buyer_session") === "true";
+  const { session, role, logout: globalLogout } = useAuth();
+  // Buyer pages are generally accessible via checkout links or magic links.
+  const hasSession = !!session && role === "buyer";
 
-  const startSession = () => localStorage.setItem("buyer_session", "true");
-  const endSession = () => localStorage.removeItem("buyer_session");
+  const startSession = () => { /* No-op; buyer session usually created via Stripe/Discord callback */ };
+  const endSession = async () => { await globalLogout() };
 
   return { hasSession, startSession, endSession };
 }
