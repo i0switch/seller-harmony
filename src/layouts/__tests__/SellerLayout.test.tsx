@@ -73,6 +73,9 @@ describe('SellerLayout', () => {
             logout: vi.fn(),
             setOnboardingStep: vi.fn(),
             completeOnboarding: vi.fn(),
+            getNextStep: vi.fn(),
+            canAccessStep: vi.fn(),
+            signup: vi.fn(),
         });
 
         renderLayout();

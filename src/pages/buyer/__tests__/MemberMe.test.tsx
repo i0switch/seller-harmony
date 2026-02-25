@@ -50,7 +50,6 @@ describe('MemberMe', () => {
             {
                 id: '1',
                 sellerName: 'Test Seller',
-                planId: 'p1',
                 planName: 'Active Premium Plan',
                 planType: 'subscription',
                 price: 1000,
@@ -63,12 +62,11 @@ describe('MemberMe', () => {
                 roleName: 'Premium Role',
                 purchasedAt: '2023-01-01T00:00:00Z',
                 nextBillingDate: '2023-02-01T00:00:00Z',
+                expiresAt: null,
             },
             {
                 id: '2',
-                sellerId: 's1',
                 sellerName: 'Test Seller',
-                planId: 'p2',
                 planName: 'Expired Basic Plan',
                 planType: 'subscription',
                 price: 500,
@@ -81,6 +79,7 @@ describe('MemberMe', () => {
                 roleName: 'Basic Role',
                 purchasedAt: '2022-01-01T00:00:00Z',
                 expiresAt: '2022-12-31T00:00:00Z',
+                nextBillingDate: null,
             }
         ];
 
@@ -101,15 +100,19 @@ describe('MemberMe', () => {
             {
                 id: '3',
                 sellerName: 'Test Seller',
-                planId: 'p3',
                 planName: 'Pending Plan',
                 planType: 'subscription',
                 price: 1000,
                 currency: 'JPY',
                 status: 'pending_discord',
                 discordLinkStatus: 'not_linked',
-                roleStatus: 'not_granted',
+                roleStatus: 'pending',
+                roleName: '',
+                guildName: '',
+                discordUsername: '',
                 purchasedAt: '2023-01-01T00:00:00Z',
+                nextBillingDate: null,
+                expiresAt: null,
             }
         ];
 

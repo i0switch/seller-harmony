@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import SellerDashboard from '../SellerDashboard';
 import { sellerApi } from '@/services/api';
-import type { SellerDiscordSettings } from '@/types';
+import type { SellerDiscordSettings } from '@/services/api.types';
 
 // Mock the API module
 vi.mock('@/services/api', () => ({
