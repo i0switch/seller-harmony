@@ -1,20 +1,62 @@
-import { mockSellerStats, mockSellerAnnouncements, mockSellerDiscord, mockPlans, mockMembers, formatCurrency, stripeStatusLabel } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Package, TrendingUp, TrendingDown, UserPlus, Webhook, CreditCard, AlertTriangle, Megaphone, MessageCircle } from "lucide-react";
+import { formatCurrency, stripeStatusLabel } from "@/lib/mockData";
+import { sellerApi } from "@/services/api";
+import { ErrorBanner } from "@/components/shared";
 
 export default function SellerDashboard() {
-  const errorMembers = mockMembers.filter((m) => m.lastError);
   const stripeStatus = "verified" as const;
 
-  const stats = [
-    { label: "有効会員数", value: String(mockSellerStats.totalMembers), icon: Users, link: "/seller/members" },
-    { label: "アクティブプラン", value: String(mockSellerStats.activePlans), icon: Package, link: "/seller/plans" },
-    { label: "月間売上", value: formatCurrency(mockSellerStats.mrr), icon: TrendingUp },
-    { label: "解約率", value: `${mockSellerStats.churnRate}%`, icon: TrendingDown },
-    { label: "今月の新規", value: `+${mockSellerStats.newMembersThisMonth}`, icon: UserPlus },
-    { label: "エラー件数", value: String(errorMembers.length), icon: AlertTriangle, alert: errorMembers.length > 0 },
+  const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery({
+    queryKey: ["seller", "stats"],
+    queryFn: () => sellerApi.getStats(),
+  });
+
+  const { data: announcements, isLoading: annLoading, error: annError, refetch: refetchAnn } = useQuery({
+    queryKey: ["seller", "announcements"],
+    queryFn: () => sellerApi.getAnnouncements(),
+  });
+
+  const { data: discordSettings, isLoading: discordLoading, error: discordError, refetch: refetchDiscord } = useQuery({
+    queryKey: ["seller", "discord", "settings"],
+    queryFn: () => sellerApi.getDiscordSettings(),
+  });
+
+  const isLoading = statsLoading || annLoading || discordLoading;
+  const error = statsError || annError || discordError;
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-2xl font-bold">ダッシュボード</h2>
+        <ErrorBanner error={error} onRetry={() => { refetchStats(); refetchAnn(); refetchDiscord(); }} />
+      </div>
+    );
+  }
+
+  if (isLoading || !stats || !announcements || !discordSettings) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">ダッシュボード</h2>
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const statItems = [
+    { label: "有効会員数", value: String(stats.totalMembers), icon: Users, link: "/seller/members" },
+    { label: "アクティブプラン", value: String(stats.activePlans), icon: Package, link: "/seller/plans" },
+    { label: "月間売上", value: formatCurrency(stats.mrr), icon: TrendingUp },
+    { label: "解約率", value: `${stats.churnRate}%`, icon: TrendingDown },
+    { label: "今月の新規", value: `+${stats.newMembersThisMonth}`, icon: UserPlus },
+    { label: "Webhook数(今日)", value: String(stats.webhooksToday), icon: Webhook },
   ];
 
   return (
@@ -22,7 +64,7 @@ export default function SellerDashboard() {
       <h2 className="text-2xl font-bold">ダッシュボード</h2>
 
       {/* System Announcements */}
-      {mockSellerAnnouncements.map((a) => (
+      {announcements.map((a) => (
         <div key={a.id} className={`rounded-xl p-4 flex items-start gap-3 ${a.severity === "warning" ? "bg-warning/10 border border-warning/30" : "bg-accent/10 border border-accent/30"}`}>
           <Megaphone className={`h-5 w-5 shrink-0 mt-0.5 ${a.severity === "warning" ? "text-warning" : "text-accent"}`} />
           <div>
@@ -45,13 +87,13 @@ export default function SellerDashboard() {
       </div>
 
       {/* Discord Warning */}
-      {!mockSellerDiscord.botConnected && (
+      {!discordSettings.botConnected && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-start gap-3">
           <MessageCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold text-sm text-destructive">Discord Bot未接続</p>
             <p className="text-xs text-muted-foreground mt-1">ロールの自動付与が行われません。Discord設定を確認してください。</p>
-            <Button asChild size="sm" variant="outline" className="mt-2">
+            <Button asChild size="sm" variant="outline" className="mt-2 text-destructive border-destructive/50 hover:bg-destructive-foreground">
               <Link to="/seller/settings/discord">Discord設定へ</Link>
             </Button>
           </div>
@@ -60,11 +102,11 @@ export default function SellerDashboard() {
 
       {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {stats.map((s) => {
-          const cls = `glass-card rounded-xl p-4 hover:shadow-md transition-shadow ${s.alert ? "border-destructive/40" : ""}`;
+        {statItems.map((s) => {
+          const cls = `glass-card rounded-xl p-4 hover:shadow-md transition-shadow`;
           const inner = (
             <>
-              <div className={`flex items-center gap-2 mb-2 ${s.alert ? "text-destructive" : "text-muted-foreground"}`}>
+              <div className={`flex items-center gap-2 mb-2 text-muted-foreground`}>
                 <s.icon className="h-4 w-4" />
                 <span className="text-xs">{s.label}</span>
               </div>
@@ -86,7 +128,7 @@ export default function SellerDashboard() {
             <Package className="h-5 w-5 text-accent" />
             <div className="text-left">
               <p className="font-medium">プラン管理</p>
-              <p className="text-xs text-muted-foreground">{mockPlans.filter((p) => p.status === "published").length}件公開中</p>
+              <p className="text-xs text-muted-foreground">{stats.activePlans}件公開中</p>
             </div>
           </Link>
         </Button>

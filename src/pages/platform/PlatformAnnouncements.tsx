@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { mockAnnouncements, announcementStatusLabel, announcementSeverityLabel, formatDateJP } from "@/lib/mockData";
-import type { Announcement, AnnouncementSeverity, AnnouncementTarget, AnnouncementStatus } from "@/lib/mockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { platformApi } from "@/services/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Eye, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState } from "@/components/shared";
+import { EmptyState, ErrorBanner } from "@/components/shared";
 import { useToast } from "@/hooks/use-toast";
+import type { SystemAnnouncement, AnnouncementSeverity, AnnouncementTarget, AnnouncementStatus } from "@/types";
+import { announcementStatusLabel, announcementSeverityLabel, formatDateJP } from "@/types";
 
 const statusVariant: Record<AnnouncementStatus, "default" | "secondary" | "outline"> = {
   published: "default", draft: "secondary", ended: "outline",
@@ -20,32 +22,52 @@ const severityVariant: Record<AnnouncementSeverity, "default" | "destructive" | 
   info: "secondary", warning: "default", critical: "destructive",
 };
 
-const emptyAnn: Omit<Announcement, "id" | "createdAt" | "updatedAt"> = {
+const emptyAnn: Omit<SystemAnnouncement, "id" | "createdAt" | "updatedAt"> = {
   title: "", body: "", severity: "info", targetScope: "all", status: "draft",
   startsAt: "", endsAt: "", isPublished: false,
 };
 
 export default function PlatformAnnouncements() {
-  const [announcements] = useState(mockAnnouncements);
   const [statusFilter, setStatusFilter] = useState<AnnouncementStatus | "all">("all");
   const [editOpen, setEditOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [editData, setEditData] = useState<Omit<Announcement, "id" | "createdAt" | "updatedAt">>(emptyAnn);
-  const [previewData, setPreviewData] = useState<Announcement | null>(null);
-  const { toast } = useToast();
+  const [editData, setEditData] = useState<Omit<SystemAnnouncement, "id" | "createdAt" | "updatedAt"> | Partial<SystemAnnouncement>>(emptyAnn);
+  const [previewData, setPreviewData] = useState<SystemAnnouncement | null>(null);
 
-  const filtered = statusFilter === "all" ? announcements : announcements.filter((a) => a.status === statusFilter);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: announcements, isLoading, error, refetch } = useQuery({
+    queryKey: ["platform", "announcements", { statusFilter }],
+    queryFn: () => platformApi.getAnnouncements(statusFilter !== "all" ? { status: statusFilter } : undefined),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (data: Partial<SystemAnnouncement>) => platformApi.saveAnnouncement(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform", "announcements"] });
+      setEditOpen(false);
+      toast({ title: "保存しました", description: `お知らせを保存しました` });
+    },
+    onError: () => {
+      toast({ title: "エラー", description: "お知らせの保存に失敗しました", variant: "destructive" });
+    }
+  });
+
+  // To avoid runtime errors on mapping undefined
+  const items = announcements || [];
 
   const openCreate = () => { setEditData(emptyAnn); setEditOpen(true); };
-  const openEdit = (a: Announcement) => {
-    setEditData({ title: a.title, body: a.body, severity: a.severity, targetScope: a.targetScope, status: a.status, startsAt: a.startsAt, endsAt: a.endsAt, isPublished: a.isPublished });
+  const openEdit = (a: SystemAnnouncement) => {
+    setEditData({ id: a.id, title: a.title, body: a.body, severity: a.severity, targetScope: a.targetScope, status: a.status, startsAt: a.startsAt, endsAt: a.endsAt, isPublished: a.isPublished });
     setEditOpen(true);
   };
 
   const handleSave = () => {
-    setEditOpen(false);
-    toast({ title: "保存しました", description: `「${editData.title}」を保存しました` });
+    saveMutation.mutate(editData);
   };
+
+  if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   return (
     <div className="space-y-6">
@@ -64,11 +86,15 @@ export default function PlatformAnnouncements() {
         </SelectContent>
       </Select>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-32 glass-card rounded-xl animate-pulse" />)}
+        </div>
+      ) : items.length === 0 ? (
         <EmptyState title="お知らせがありません" />
       ) : (
         <div className="space-y-3">
-          {filtered.map((a) => (
+          {items.map((a) => (
             <div key={a.id} className="glass-card rounded-xl p-4 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -77,8 +103,8 @@ export default function PlatformAnnouncements() {
                   <span className="text-xs text-muted-foreground">対象: {a.targetScope === "all" ? "全員" : a.targetScope === "active" ? "契約中" : a.targetScope === "trial" ? "試用中" : "指定"}</span>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" onClick={() => { setPreviewData(a); setPreviewOpen(true); }}><Eye className="h-3 w-3" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(a)}><Edit className="h-3 w-3" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setPreviewData(a); setPreviewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(a)}><Edit className="h-4 w-4" /></Button>
                 </div>
               </div>
               <h3 className="font-semibold">{a.title}</h3>
@@ -96,7 +122,7 @@ export default function PlatformAnnouncements() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>{editData.title ? "お知らせ編集" : "お知らせ作成"}</DialogTitle>
+            <DialogTitle>{"id" in editData && editData.id ? "お知らせ編集" : "お知らせ作成"}</DialogTitle>
             <DialogDescription>テナント向けお知らせを作成・編集します</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -150,7 +176,9 @@ export default function PlatformAnnouncements() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "保存中..." : "保存"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

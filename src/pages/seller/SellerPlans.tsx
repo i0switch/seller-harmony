@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
-import { mockPlans, planStatusLabel, planStatusVariant, planTypeLabel, formatCurrency, type PlanStatus } from "@/lib/mockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { planStatusLabel, planStatusVariant, planTypeLabel, formatCurrency, type PlanStatus } from "@/lib/mockData";
+import type { SellerPlan } from "@/types";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,20 +11,32 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { sellerApi } from "@/services/api";
+import { ErrorBanner, LoadingSkeleton } from "@/components/shared";
 
 export default function SellerPlans() {
   const [statusFilter, setStatusFilter] = useState<PlanStatus | "all">("all");
-  const [plans, setPlans] = useState(mockPlans);
+  const queryClient = useQueryClient();
+
+  const { data: plans, isLoading, error, refetch } = useQuery({
+    queryKey: ["seller", "plans"],
+    queryFn: () => sellerApi.getPlans(),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: (args: { id: string, data: Partial<SellerPlan> }) => sellerApi.savePlan(args.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["seller", "plans"] }),
+  });
 
   const filtered = useMemo(() => {
+    if (!plans) return [];
     if (statusFilter === "all") return plans;
     return plans.filter((p) => p.status === statusFilter);
   }, [plans, statusFilter]);
 
-  const togglePublish = (id: string) => {
-    setPlans((prev) => prev.map((p) =>
-      p.id === id ? { ...p, status: p.status === "published" ? "stopped" as PlanStatus : "published" as PlanStatus } : p
-    ));
+  const togglePublish = (p: SellerPlan) => {
+    const newStatus = p.status === "published" ? "stopped" : "published";
+    publishMutation.mutate({ id: p.id, data: { ...p, status: newStatus } });
   };
 
   return (
@@ -42,9 +56,13 @@ export default function SellerPlans() {
         </SelectContent>
       </Select>
 
-      {filtered.length === 0 ? (
+      {error ? (
+        <ErrorBanner error={error} onRetry={refetch} />
+      ) : isLoading ? (
+        <LoadingSkeleton type="cards" rows={3} />
+      ) : filtered.length === 0 ? (
         <div className="glass-card rounded-xl p-8 text-center text-muted-foreground">
-          プランがありません。新規プランを作成しましょう。
+          {statusFilter === "all" ? "プランがありません。新規プランを作成しましょう。" : "条件に一致するプランがありません。"}
         </div>
       ) : (
         <div className="space-y-3">
@@ -54,8 +72,8 @@ export default function SellerPlans() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold">{p.name}</h3>
-                    <Badge variant={planStatusVariant[p.status]}>{planStatusLabel[p.status]}</Badge>
-                    <Badge variant="outline">{planTypeLabel[p.planType]}</Badge>
+                    <Badge variant={planStatusVariant[p.status]}>{planStatusLabel[p.status as keyof typeof planStatusLabel]}</Badge>
+                    <Badge variant="outline">{planTypeLabel[p.planType as keyof typeof planTypeLabel]}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{p.description}</p>
                 </div>
@@ -67,7 +85,7 @@ export default function SellerPlans() {
 
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <span>会員: {p.memberCount}名</span>
-                <span>ロール: {p.discordRoleName}</span>
+                <span>ロール: {p.discordRoleName || "指定なし"}</span>
                 {p.grantPolicy === "limited" && <span>期限: {p.grantDays}日</span>}
               </div>
 
@@ -77,7 +95,7 @@ export default function SellerPlans() {
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline">
+                    <Button size="sm" variant="outline" disabled={publishMutation.isPending}>
                       {p.status === "published" ? <><EyeOff className="h-3 w-3 mr-1" />停止</> : <><Eye className="h-3 w-3 mr-1" />公開</>}
                     </Button>
                   </AlertDialogTrigger>
@@ -92,7 +110,7 @@ export default function SellerPlans() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => togglePublish(p.id)}>
+                      <AlertDialogAction onClick={() => togglePublish(p)}>
                         {p.status === "published" ? "停止する" : "公開する"}
                       </AlertDialogAction>
                     </AlertDialogFooter>

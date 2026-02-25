@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { mockCrosscheck, crosscheckJudgmentLabel, crosscheckJudgmentVariant, billingStatusLabel, billingStatusVariant, roleStatusLabel, roleStatusVariant, formatDateTimeJP, type CrosscheckJudgment } from "@/lib/mockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { crosscheckJudgmentLabel, crosscheckJudgmentVariant, billingStatusLabel, billingStatusVariant, roleStatusLabel, roleStatusVariant, formatDateTimeJP, type CrosscheckJudgment } from "@/lib/mockData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,19 +11,36 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { sellerApi } from "@/services/api";
+import { ErrorBanner, LoadingSkeleton } from "@/components/shared";
 
 export default function SellerCrosscheck() {
   const [filter, setFilter] = useState<CrosscheckJudgment | "all" | "issues">("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: crosscheckRows, isLoading, error, refetch } = useQuery({
+    queryKey: ["seller", "crosscheck"],
+    queryFn: () => sellerApi.getCrosscheck(),
+  });
+
+  const runCheckMutation = useMutation({
+    mutationFn: () => sellerApi.runCrosscheck(),
+    onSuccess: () => {
+      toast({ title: "クロスチェック開始", description: "全会員の整合性確認をバックグラウンドで開始しました" });
+      refetch();
+    }
+  });
 
   const filtered = useMemo(() => {
-    if (filter === "all") return mockCrosscheck;
-    if (filter === "issues") return mockCrosscheck.filter((c) => c.judgment !== "ok");
-    return mockCrosscheck.filter((c) => c.judgment === filter);
-  }, [filter]);
+    if (!crosscheckRows) return [];
+    if (filter === "all") return crosscheckRows;
+    if (filter === "issues") return crosscheckRows.filter((c) => c.judgment !== "ok");
+    return crosscheckRows.filter((c) => c.judgment === filter);
+  }, [crosscheckRows, filter]);
 
-  const issueCount = mockCrosscheck.filter((c) => c.judgment !== "ok").length;
+  const issueCount = crosscheckRows?.filter((c) => c.judgment !== "ok").length || 0;
 
   const toggleExpand = (id: string) => {
     setExpandedIds(prev => {
@@ -33,15 +51,16 @@ export default function SellerCrosscheck() {
   };
 
   const handleRunCheck = () => {
-    toast({ title: "クロスチェック実行中", description: "全会員の整合性を確認しています..." });
+    runCheckMutation.mutate();
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold">クロスチェック</h2>
-        <Button size="sm" variant="outline" onClick={handleRunCheck}>
-          <RefreshCw className="h-4 w-4 mr-1" />手動チェック実行
+        <Button size="sm" variant="outline" onClick={handleRunCheck} disabled={runCheckMutation.isPending}>
+          <RefreshCw className={`h-4 w-4 mr-1 ${runCheckMutation.isPending ? "animate-spin" : ""}`} />
+          手動チェック実行
         </Button>
       </div>
 
@@ -67,7 +86,11 @@ export default function SellerCrosscheck() {
         </SelectContent>
       </Select>
 
-      {filtered.length === 0 ? (
+      {error ? (
+        <ErrorBanner error={error} onRetry={refetch} />
+      ) : isLoading ? (
+        <LoadingSkeleton type="cards" rows={3} />
+      ) : filtered.length === 0 ? (
         <div className="glass-card rounded-xl p-8 text-center space-y-3">
           <CheckCircle className="h-12 w-12 mx-auto text-success" />
           <p className="font-semibold">不整合なし</p>
@@ -105,10 +128,8 @@ export default function SellerCrosscheck() {
                   </div>
                 </div>
 
-                {/* Improved detail display */}
                 <p className="text-sm text-foreground leading-relaxed">{c.detail}</p>
 
-                {/* Expanded: show expected vs actual + suggested action */}
                 {isExpanded && c.judgment !== "ok" && (
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-xs">
                     <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">

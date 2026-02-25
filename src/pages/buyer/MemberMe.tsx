@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,7 +8,7 @@ import {
   ChevronDown, ChevronUp, Clock, User,
 } from "lucide-react";
 import { ConfirmDialog, EmptyState, LoadingSkeleton, ErrorBanner } from "@/components/shared";
-import { buyerApi } from "@/services/mockApi";
+import { buyerApi } from "@/services/api";
 import {
   BuyerMembership, membershipStatusLabel, membershipStatusVariant,
   discordLinkStatusLabel, discordLinkStatusVariant,
@@ -125,12 +126,12 @@ function PlanCard({ plan }: { plan: BuyerMembership }) {
           <div className="space-y-2 pt-1">
             {(plan.discordLinkStatus === "not_linked" || plan.discordLinkStatus === "relink_required" || plan.discordLinkStatus === "token_expired") &&
               plan.status !== "expired" && plan.status !== "refunded" && (
-              <Button asChild size="sm" className="w-full">
-                <Link to="/buyer/discord/confirm">
-                  <MessageCircle className="h-4 w-4 mr-1" /> Discord連携する
-                </Link>
-              </Button>
-            )}
+                <Button asChild size="sm" className="w-full">
+                  <Link to="/buyer/discord/confirm">
+                    <MessageCircle className="h-4 w-4 mr-1" /> Discord連携する
+                  </Link>
+                </Button>
+              )}
             {plan.roleStatus === "failed" && (
               <Button variant="outline" size="sm" className="w-full" onClick={handleRoleRequest}>
                 <RefreshCw className="h-4 w-4 mr-1" /> ロール再付与をリクエスト
@@ -151,23 +152,13 @@ function PlanCard({ plan }: { plan: BuyerMembership }) {
 }
 
 export default function MemberMe() {
-  const [memberships, setMemberships] = useState<BuyerMembership[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: memberships = [], isLoading, error, refetch } = useQuery({
+    queryKey: ["buyer", "memberships"],
+    queryFn: () => buyerApi.getMemberships(),
+  });
 
-  const load = () => {
-    setIsLoading(true);
-    setError(null);
-    buyerApi.getMemberships()
-      .then(setMemberships)
-      .catch(e => setError(e.message))
-      .finally(() => setIsLoading(false));
-  };
-
-  useEffect(() => { load(); }, []);
-
-  if (isLoading) return <LoadingSkeleton rows={3} />;
-  if (error) return <ErrorBanner message={error} onRetry={load} />;
+  if (isLoading) return <LoadingSkeleton type="cards" rows={3} />;
+  if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   const activePlans = memberships.filter(p =>
     ["active", "grace_period", "cancel_scheduled", "payment_failed", "pending_discord"].includes(p.status)
@@ -226,7 +217,7 @@ export default function MemberMe() {
           description="この操作は取り消せません。すべてのプランが解約され、Discord連携も解除されます。"
           confirmLabel="削除する"
           destructive
-          onConfirm={() => {}}
+          onConfirm={() => { }}
         />
       </div>
     </div>

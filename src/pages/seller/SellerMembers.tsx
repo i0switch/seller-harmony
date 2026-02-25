@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 import { DataTable, FilterBar, PaginationBar, LoadingSkeleton, ErrorBanner, type Column } from "@/components/shared";
-import { sellerApi } from "@/services/mockApi";
+import { sellerApi } from "@/services/api";
 import {
   SellerMember, PaginatedResponse,
   sellerBillingStatusLabel, sellerBillingStatusVariant,
@@ -19,20 +20,10 @@ export default function SellerMembers() {
   const [sortKey, setSortKey] = useState("joinedAt");
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedResponse<SellerMember> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-    sellerApi.getMembers({ search, billingStatus: billingFilter, sortKey, sortAsc, page, pageSize: PAGE_SIZE })
-      .then(setData)
-      .catch(e => setError(e.message))
-      .finally(() => setIsLoading(false));
-  }, [search, billingFilter, sortKey, sortAsc, page]);
-
-  useEffect(() => { load(); }, [load]);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["seller", "members", { search, billingFilter, sortKey, sortAsc, page }],
+    queryFn: () => sellerApi.getMembers({ search, billingStatus: billingFilter, sortKey, sortAsc, page, pageSize: PAGE_SIZE }),
+  });
 
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -74,7 +65,7 @@ export default function SellerMembers() {
     },
   ], []);
 
-  if (error) return <ErrorBanner message={error} onRetry={load} />;
+  if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   const totalCount = data?.total_count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));

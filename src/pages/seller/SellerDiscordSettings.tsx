@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { formatDateTimeJP } from "@/lib/mockData";
-import { sellerApi } from "@/services/mockApi";
+import { sellerApi } from "@/services/api";
 import type { SellerDiscordSettings, DiscordVerificationEntry } from "@/services/api.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

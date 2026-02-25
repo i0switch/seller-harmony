@@ -9,7 +9,7 @@ import { webhookStatusLabel, webhookStatusVariant, formatDateTimeJP, type Webhoo
 import { useToast } from "@/hooks/use-toast";
 
 export default function SellerWebhooks() {
-  const tenantWebhooks = mockWebhooks.filter((w) => w.tenantId === "t1");
+  const tenantWebhooks = useMemo(() => mockWebhooks.filter((w) => w.tenantId === "t1"), []);
   const [statusFilter, setStatusFilter] = useState<WebhookProcessStatus | "all">("all");
   const [detailId, setDetailId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -19,7 +19,7 @@ export default function SellerWebhooks() {
     if (statusFilter !== "all") list = list.filter((w) => w.processStatus === statusFilter);
     list.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
     return list;
-  }, [statusFilter]);
+  }, [statusFilter, tenantWebhooks]);
 
   const detail = detailId ? tenantWebhooks.find((w) => w.id === detailId) : null;
 

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Pause, X } from "lucide-react";
 import { FilterBar, PaginationBar, LoadingSkeleton, ErrorBanner, ConfirmDialog, DataTable, type Column } from "@/components/shared";
-import { platformApi } from "@/services/mockApi";
+import { platformApi } from "@/services/api";
 import {
   RetryQueueJob, PaginatedResponse,
   retryJobTypeLabel, retryStatusLabel, retryStatusVariant, formatDateTimeJP,
@@ -16,18 +17,12 @@ export default function PlatformRetryQueue() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedResponse<RetryQueueJob> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const load = useCallback(() => {
-    setIsLoading(true); setError(null);
-    platformApi.getRetryQueue({ jobType: typeFilter, status: statusFilter, page, pageSize: PAGE_SIZE })
-      .then(setData).catch(e => setError(e.message)).finally(() => setIsLoading(false));
-  }, [typeFilter, statusFilter, page]);
-
-  useEffect(() => { load(); }, [load]);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["platform", "retryQueue", { typeFilter, statusFilter, page }],
+    queryFn: () => platformApi.getRetryQueue({ jobType: typeFilter, status: statusFilter, page, pageSize: PAGE_SIZE }),
+  });
 
   const handleAction = (r: RetryQueueJob, action: string) => {
     toast({ title: `${action}しました`, description: `${r.tenantName} の ${retryJobTypeLabel[r.jobType]} ジョブを${action}しました` });
@@ -76,7 +71,7 @@ export default function PlatformRetryQueue() {
     },
   ];
 
-  if (error) return <ErrorBanner message={error} onRetry={load} />;
+  if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   const totalCount = data?.total_count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));

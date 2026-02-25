@@ -1,24 +1,69 @@
-import { mockPlatformStats, mockAlerts, mockKillSwitches, formatCurrency, formatDateTimeJP } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Users, UserCheck, UserX, Webhook, RefreshCw, MessageCircle, AlertTriangle, AlertCircle, Info, Megaphone, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-const kpiCards = [
-  { label: "契約中テナント", value: mockPlatformStats.activeTenants, icon: UserCheck, link: "/platform/tenants" },
-  { label: "試用中テナント", value: mockPlatformStats.trialTenants, icon: Users, link: "/platform/tenants" },
-  { label: "停止中テナント", value: mockPlatformStats.suspendedTenants, icon: UserX, link: "/platform/tenants", alert: mockPlatformStats.suspendedTenants > 0 },
-  { label: "Webhook失敗", value: mockPlatformStats.webhookFailures, icon: Webhook, link: "/platform/webhooks", alert: mockPlatformStats.webhookFailures > 0 },
-  { label: "再試行待ち", value: mockPlatformStats.retryPending, icon: RefreshCw, link: "/platform/retry-queue", alert: mockPlatformStats.retryPending > 0 },
-  { label: "Discord API失敗", value: mockPlatformStats.discordApiFailures, icon: MessageCircle, alert: mockPlatformStats.discordApiFailures > 0 },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { platformApi } from "@/services/api";
+import { formatDateTimeJP } from "@/lib/mockData";
+import { ErrorBanner } from "@/components/shared";
 
 const alertIcon = { error: AlertCircle, warning: AlertTriangle, info: Info };
 const alertColor = { error: "text-destructive", warning: "text-warning", info: "text-accent" };
 
 export default function PlatformDashboard() {
-  const unresolvedAlerts = mockAlerts.filter((a) => !a.resolved);
-  const activeKillSwitches = mockKillSwitches.filter((k) => k.enabled);
+  const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery({
+    queryKey: ["platform", "stats"],
+    queryFn: () => platformApi.getStats(),
+  });
+
+  const { data: alerts, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useQuery({
+    queryKey: ["platform", "alerts"],
+    queryFn: () => platformApi.getAlerts(),
+  });
+
+  const { data: killSwitches, isLoading: killSwitchesLoading, error: ksError, refetch: refetchKs } = useQuery({
+    queryKey: ["platform", "kill-switches"],
+    queryFn: () => platformApi.getKillSwitches(),
+  });
+
+  const isLoading = statsLoading || alertsLoading || killSwitchesLoading;
+  const error = statsError || alertsError || ksError;
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-2xl font-bold">ダッシュボード</h2>
+        <ErrorBanner
+          error={error}
+          onRetry={() => { refetchStats(); refetchAlerts(); refetchKs(); }}
+        />
+      </div>
+    );
+  }
+
+  if (isLoading || !stats || !alerts || !killSwitches) {
+    return (
+      <div className="space-y-8">
+        <h2 className="text-2xl font-bold">ダッシュボード</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const unresolvedAlerts = alerts.filter((a) => !a.resolved);
+  const activeKillSwitches = killSwitches.filter((k) => k.enabled);
+
+  const kpiCards = [
+    { label: "契約中テナント", value: stats.activeTenants, icon: UserCheck, link: "/platform/tenants" },
+    { label: "試用中テナント", value: stats.trialTenants, icon: Users, link: "/platform/tenants" },
+    { label: "停止中テナント", value: stats.suspendedTenants, icon: UserX, link: "/platform/tenants", alert: stats.suspendedTenants > 0 },
+    { label: "Webhook失敗", value: stats.webhookFailures, icon: Webhook, link: "/platform/webhooks", alert: stats.webhookFailures > 0 },
+    { label: "再試行待ち", value: stats.retryPending, icon: RefreshCw, link: "/platform/retry-queue", alert: stats.retryPending > 0 },
+    { label: "Discord API失敗", value: stats.discordApiFailures, icon: MessageCircle, alert: stats.discordApiFailures > 0 },
+  ];
 
   return (
     <div className="space-y-8">
@@ -110,7 +155,7 @@ export default function PlatformDashboard() {
                 <RefreshCw className="h-5 w-5 text-accent" />
                 <div className="text-left">
                   <p className="font-medium">リトライキュー確認</p>
-                  <p className="text-xs text-muted-foreground">{mockPlatformStats.retryPending}件 待機中</p>
+                  <p className="text-xs text-muted-foreground">{stats.retryPending}件 待機中</p>
                 </div>
               </Link>
             </Button>

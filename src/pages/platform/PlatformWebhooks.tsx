@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DataTable, FilterBar, PaginationBar, LoadingSkeleton, ErrorBanner, ConfirmDialog, type Column } from "@/components/shared";
-import { platformApi } from "@/services/mockApi";
+import { platformApi } from "@/services/api";
 import {
   PlatformWebhookEvent, PaginatedResponse,
   webhookStatusLabel, webhookStatusVariant, formatDateTimeJP,
@@ -18,19 +19,13 @@ export default function PlatformWebhooks() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedResponse<PlatformWebhookEvent> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["platform", "webhooks", { search, statusFilter, page }],
+    queryFn: () => platformApi.getWebhooks({ search, status: statusFilter, page, pageSize: PAGE_SIZE }),
+  });
+
   const [detail, setDetail] = useState<PlatformWebhookEvent | null>(null);
   const { toast } = useToast();
-
-  const load = useCallback(() => {
-    setIsLoading(true); setError(null);
-    platformApi.getWebhooks({ search, status: statusFilter, page, pageSize: PAGE_SIZE })
-      .then(setData).catch(e => setError(e.message)).finally(() => setIsLoading(false));
-  }, [search, statusFilter, page]);
-
-  useEffect(() => { load(); }, [load]);
 
   const handleReprocess = (w: PlatformWebhookEvent) => {
     toast({ title: "再処理を開始", description: `${w.eventType} (${w.stripeEventId}) の再処理を開始しました` });
@@ -62,7 +57,7 @@ export default function PlatformWebhooks() {
     },
   ];
 
-  if (error) return <ErrorBanner message={error} onRetry={load} />;
+  if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   const totalCount = data?.total_count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));

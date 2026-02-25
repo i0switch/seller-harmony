@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pause, Play } from "lucide-react";
 import { DataTable, FilterBar, PaginationBar, LoadingSkeleton, ErrorBanner, ConfirmDialog, type Column } from "@/components/shared";
-import { platformApi } from "@/services/mockApi";
+import { platformApi } from "@/services/api";
 import {
   PlatformTenant, TenantStatus, PaginatedResponse,
   tenantStatusLabel, tenantStatusVariant, stripeStatusLabel,
@@ -20,33 +21,25 @@ export default function PlatformTenants() {
   const [sortKey, setSortKey] = useState("lastActiveAt");
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedResponse<PlatformTenant> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const load = useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-    platformApi.getTenants({ search, status: statusFilter, sortKey, sortAsc, page, pageSize: PAGE_SIZE })
-      .then(setData)
-      .catch(e => setError(e.message))
-      .finally(() => setIsLoading(false));
-  }, [search, statusFilter, sortKey, sortAsc, page]);
-
-  useEffect(() => { load(); }, [load]);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["platform", "tenants", { search, statusFilter, sortKey, sortAsc, page }],
+    queryFn: () => platformApi.getTenants({ search, status: statusFilter, sortKey, sortAsc, page, pageSize: PAGE_SIZE }),
+  });
 
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortAsc(!sortAsc);
     else { setSortKey(key); setSortAsc(false); }
   };
 
-  const handleSuspend = (t: PlatformTenant) => {
+  const handleSuspend = useCallback((t: PlatformTenant) => {
     toast({ title: "テナント停止", description: `${t.name} を停止しました（モック）` });
-  };
-  const handleResume = (t: PlatformTenant) => {
+  }, [toast]);
+
+  const handleResume = useCallback((t: PlatformTenant) => {
     toast({ title: "テナント再開", description: `${t.name} を再開しました（モック）` });
-  };
+  }, [toast]);
 
   const columns: Column<PlatformTenant>[] = useMemo(() => [
     {
@@ -107,9 +100,9 @@ export default function PlatformTenants() {
         </div>
       ),
     },
-  ], []);
+  ], [handleSuspend, handleResume]);
 
-  if (error) return <ErrorBanner message={error} onRetry={load} />;
+  if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   const totalCount = data?.total_count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
