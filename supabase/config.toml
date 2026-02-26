@@ -1,1 +1,16 @@
 project_id = "xaqzuevdmeqxntvhamce"
+
+[functions.stripe-onboarding]
+verify_jwt = false
+
+[functions.stripe-checkout]
+verify_jwt = false
+
+[functions.discord-oauth]
+verify_jwt = false
+
+[functions.discord-bot]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
