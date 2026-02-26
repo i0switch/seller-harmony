@@ -8,8 +8,8 @@ import { useSellerAuth } from "@/hooks/useSellerAuth";
 export default function SellerLogin() {
   const navigate = useNavigate();
   const { login } = useSellerAuth();
-  const [email, setEmail] = useState("ai@example.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -18,7 +18,7 @@ export default function SellerLogin() {
       setError("メールアドレスとパスワードを入力してください");
       return;
     }
-    const res = await login(email, password);
+    const res = await login(email, password) as { error: unknown };
     if (res.error) {
       setError("ログインに失敗しました。メールアドレスとパスワードを確認してください。");
       return;
@@ -36,12 +36,12 @@ export default function SellerLogin() {
         <form onSubmit={handleLogin} className="space-y-4">
           {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">{error}</p>}
           <div className="space-y-2">
-            <Label>メールアドレス</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Label htmlFor="email">メールアドレス</Label>
+            <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>パスワード</Label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Label htmlFor="password">パスワード</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <Button type="submit" className="w-full">ログイン</Button>
         </form>

@@ -14,8 +14,8 @@ interface AuthContextType {
     // Seller specific state
     sellerOnboardingStep: OnboardingStep;
     setSellerOnboardingStep: (step: OnboardingStep) => void;
-    sellerLogin: (email: string, pass: string) => Promise<any>;
-    sellerSignup: (email: string, pass: string) => Promise<any>;
+    sellerLogin: (email: string, pass: string) => Promise<unknown>;
+    sellerSignup: (email: string, pass: string) => Promise<unknown>;
 
     // Shared actions
     logout: () => Promise<void>;
@@ -40,11 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const initializeAuth = async () => {
-            onAuthStateChange(null, null); // Dummy trigger to fetch session on mount
+            // Get initial session first
+            const { data: { session: initialSession } } = await supabase.auth.getSession();
+            await onAuthStateChange("INITIAL", initialSession);
 
-            const { data: { session } } = await supabase.auth.getSession();
-            await onAuthStateChange(null, session);
-
+            // Then listen for changes
             const { data: { subscription } } = supabase.auth.onAuthStateChange(
                 (_event, newSession) => onAuthStateChange(_event, newSession)
             );
@@ -57,7 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         initializeAuth();
     }, []);
 
-    const onAuthStateChange = async (_event: any, currentSession: Session | null) => {
+    const onAuthStateChange = async (event: string | null, currentSession: Session | null) => {
+        console.log(`AuthContext: onAuthStateChange event: ${event}`);
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .single();
             setRole((data?.role as Role) || "buyer");
         } else {
+            console.log("AuthContext: No session user.");
             setRole(null);
         }
 

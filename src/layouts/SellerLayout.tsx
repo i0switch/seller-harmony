@@ -17,7 +17,16 @@ const navItems = [
 export default function SellerLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isOnboarded, isLoggedIn } = useSellerAuth();
+  const { isOnboarded, isLoggedIn, isLoading } = useSellerAuth();
+
+  // Wait for auth to initialize
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+      </div>
+    );
+  }
 
   // Guard: redirect to login if not logged in
   if (!isLoggedIn) {

@@ -79,12 +79,12 @@ Deno.serve(async (req: Request) => {
       // Calculate bot's highest role position
       let botMaxPos = 0;
       for (const rid of member.roles) {
-        const r = roles.find((x: any) => x.id === rid);
+        const r = roles.find((x: { id: string; position: number }) => x.id === rid);
         if (r && r.position > botMaxPos) botMaxPos = r.position;
       }
 
       // Check if bot can manage the target role
-      const targetRole = roles.find((x: any) => x.id === role_id);
+      const targetRole = roles.find((x: { id: string; position: number }) => x.id === role_id);
       if (!targetRole) throw new Error('Target role not found in guild');
 
       const status = botMaxPos > targetRole.position ? 'ok' : 'insufficient';
@@ -110,8 +110,9 @@ Deno.serve(async (req: Request) => {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errorMsg }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

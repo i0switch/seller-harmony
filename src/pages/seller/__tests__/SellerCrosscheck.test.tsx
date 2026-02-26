@@ -73,6 +73,8 @@ describe('SellerCrosscheck', () => {
         expect(screen.getByText('John Doe')).toBeInTheDocument();
         expect(screen.getByText('john#123 ・ Basic Plan')).toBeInTheDocument();
         expect(screen.getByText('要剥奪')).toBeInTheDocument();
+        expect(screen.getByText('支払い遅延')).toBeInTheDocument();
+        expect(screen.getByText('付与済')).toBeInTheDocument();
     });
 
     it('calls runCrosscheck when manual check button is clicked', async () => {
@@ -86,5 +88,36 @@ describe('SellerCrosscheck', () => {
         await user.click(checkButton);
 
         expect(sellerApi.runCrosscheck).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows ConfirmDialog when attempting to revoke role', async () => {
+        const user = userEvent.setup();
+        const mockData = [
+            {
+                memberId: 'm1',
+                memberName: 'John Doe',
+                discordUsername: 'john#123',
+                planName: 'Basic Plan',
+                billingStatus: 'past_due',
+                roleStatus: 'granted',
+                judgment: 'needs_revoke',
+                expectedState: 'No Role',
+                actualState: 'Has Role',
+                suggestedAction: 'Revoke Role',
+                detail: 'Payment failed',
+                detectedAt: '2023-01-01T00:00:00Z'
+            }
+        ];
+
+        vi.mocked(sellerApi.getCrosscheck).mockResolvedValue(mockData as unknown as CrosscheckRow[]);
+        renderComponent();
+
+        const revokeButton = await screen.findByRole('button', { name: /剥奪/i });
+        await user.click(revokeButton);
+
+        // Alert dialog content should be visible
+        expect(screen.getByText('ロールを剥奪しますか？')).toBeInTheDocument();
+        expect(screen.getByText(/John Doe からDiscordロールを剥奪します。この操作は取り消せません。/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '剥奪する' })).toBeInTheDocument();
     });
 });

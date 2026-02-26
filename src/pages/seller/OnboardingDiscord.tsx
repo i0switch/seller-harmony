@@ -59,14 +59,15 @@ export default function OnboardingDiscord() {
         });
         setCheckStatus("error");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
       let code = "DISCORD_GUILD_ACCESS_DENIED";
-      if (err.message?.includes("Role not found")) code = "DISCORD_ROLE_NOT_FOUND";
+      if (errorMsg.includes("Role not found")) code = "DISCORD_ROLE_NOT_FOUND";
 
       setValidation({
-        botInstalled: err.message?.includes("Role not found"),
-        manageRoles: err.message?.includes("Role not found"),
+        botInstalled: errorMsg.includes("Role not found"),
+        manageRoles: errorMsg.includes("Role not found"),
         roleExists: false, roleHierarchy: false, errorCode: code
       });
       setCheckStatus("error");

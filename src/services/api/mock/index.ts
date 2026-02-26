@@ -141,8 +141,22 @@ export const sellerApi: ISellerApi = {
     return simulateRequest(plan as SellerPlan | null || null);
   },
 
-  savePlan: (data) => simulateRequest({ ...data, id: data.id || `p${Date.now()}` } as Partial<SellerPlan> & { id: string }),
+  savePlan: (data) => {
+    const newPlan = {
+      ...data,
+      id: data.id || `p${Date.now()}`,
+      status: data.status || "published",
+      memberCount: (data as Record<string, unknown>).memberCount || 0
+    } as SellerPlan;
 
+    const index = mockPlans.findIndex(p => p.id === newPlan.id);
+    if (index >= 0) {
+      mockPlans[index] = newPlan;
+    } else {
+      mockPlans.push(newPlan);
+    }
+    return simulateRequest(newPlan);
+  },
   getMembers: (params) => {
     let items = [...mockMembers] as SellerMember[];
     if (params.search) {

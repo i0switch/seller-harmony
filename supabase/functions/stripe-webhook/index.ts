@@ -56,6 +56,70 @@ async function assignDiscordRole(userId: string, sellerId: string, planId: strin
   }
 }
 
+/**
+ * Remove a Discord role from a buyer when a subscription is canceled/expired.
+ * Implements Conflict Check: If the user has another ACTIVE membership that grants the SAME role, do not remove it.
+ */
+async function removeDiscordRole(userId: string, sellerId: string, planId: string) {
+  try {
+    const { data: identity } = await supabaseAdmin
+      .from('discord_identities')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    const { data: server } = await supabaseAdmin
+      .from('discord_servers')
+      .select('*')
+      .eq('seller_id', sellerId)
+      .single();
+
+    const { data: plan } = await supabaseAdmin
+      .from('plans')
+      .select('*')
+      .eq('id', planId)
+      .single();
+
+    if (identity && server && plan?.discord_role_id) {
+      // Conflict check: Does the user have another active membership granting the SAME role?
+      const { data: activeMemberships } = await supabaseAdmin
+        .from('memberships')
+        .select('plan_id, status')
+        .eq('buyer_id', userId)
+        .in('status', ['active', 'grace_period', 'cancel_scheduled']);
+
+      let hasConflict = false;
+      if (activeMemberships) {
+        for (const m of activeMemberships) {
+          if (m.plan_id === planId) continue;
+          const { data: otherPlan } = await supabaseAdmin.from('plans').select('discord_role_id').eq('id', m.plan_id).single();
+          if (otherPlan?.discord_role_id === plan.discord_role_id) {
+            hasConflict = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasConflict) {
+        const res = await fetch(
+          `https://discord.com/api/v10/guilds/${server.guild_id}/members/${identity.discord_user_id}/roles/${plan.discord_role_id}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+          }
+        );
+        if (!res.ok) {
+          console.error(`Discord role removal failed: ${res.status} ${await res.text()}`);
+        }
+      } else {
+        console.log(`Skipped removing role ${plan.discord_role_id} due to another active membership.`);
+      }
+    }
+  } catch (err) {
+    console.error('removeDiscordRole error:', err);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   // ─── FAIL CLOSED: Reject if signature or secret is missing ───
   const signature = req.headers.get('Stripe-Signature');
@@ -83,10 +147,11 @@ Deno.serve(async (req: Request) => {
       signature,
       STRIPE_WEBHOOK_SECRET
     );
-  } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error('Webhook signature verification failed:', errorMsg);
     return new Response(
-      JSON.stringify({ error: `Signature verification failed: ${err.message}` }),
+      JSON.stringify({ error: `Signature verification failed: ${errorMsg}` }),
       { status: 400 }
     );
   }
@@ -110,7 +175,7 @@ Deno.serve(async (req: Request) => {
     await supabaseAdmin.from('stripe_webhook_events').insert({
       stripe_event_id: event.id,
       event_type: event.type,
-      payload: event as any,
+      payload: event as unknown as Record<string, unknown>,
       processing_status: 'pending',
     });
 
@@ -133,9 +198,45 @@ Deno.serve(async (req: Request) => {
         );
         await assignDiscordRole(buyer_id, seller_id, plan_id);
       }
-    }
+    } else if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (invoice.subscription) {
+        await supabaseAdmin
+          .from('memberships')
+          .update({ status: 'grace_period' })
+          .eq('stripe_subscription_id', invoice.subscription);
+      }
+    } else if (event.type === 'customer.subscription.updated') {
+      const sub = event.data.object as Stripe.Subscription;
+      if (sub.cancel_at_period_end) {
+        await supabaseAdmin
+          .from('memberships')
+          .update({ status: 'cancel_scheduled' })
+          .eq('stripe_subscription_id', sub.id);
+      } else if (sub.status === 'active') {
+        // Recovered from grace period
+        await supabaseAdmin
+          .from('memberships')
+          .update({ status: 'active' })
+          .eq('stripe_subscription_id', sub.id);
+      }
+    } else if (event.type === 'customer.subscription.deleted') {
+      const sub = event.data.object as Stripe.Subscription;
+      const { data: membership } = await supabaseAdmin
+        .from('memberships')
+        .select('buyer_id, seller_id, plan_id')
+        .eq('stripe_subscription_id', sub.id)
+        .single();
 
-    // TODO: Handle other event types (invoice.payment_failed, customer.subscription.deleted, etc.)
+      if (membership) {
+        await supabaseAdmin
+          .from('memberships')
+          .update({ status: 'canceled' })
+          .eq('stripe_subscription_id', sub.id);
+
+        await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+      }
+    }
 
     await supabaseAdmin
       .from('stripe_webhook_events')
@@ -146,18 +247,19 @@ Deno.serve(async (req: Request) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Webhook processing error:', err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
     await supabaseAdmin
       .from('stripe_webhook_events')
       .update({
         processing_status: 'failed',
-        error_message: err.message,
+        error_message: errorMsg,
       })
       .eq('stripe_event_id', event.id);
 
     // Return 200 to prevent Stripe from retrying (event is recorded for manual retry)
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: errorMsg }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

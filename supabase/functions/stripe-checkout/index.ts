@@ -85,15 +85,15 @@ Deno.serve(async (req: Request) => {
       },
       ...(isOneTime
         ? {
-            payment_intent_data: {
-              application_fee_amount: Math.round(plan.price * feeRate / 10000),
-            },
-          }
+          payment_intent_data: {
+            application_fee_amount: Math.round(plan.price * feeRate / 10000),
+          },
+        }
         : {
-            subscription_data: {
-              application_fee_percent: feeRate / 100,
-            },
-          }),
+          subscription_data: {
+            application_fee_percent: feeRate / 100,
+          },
+        }),
     }, {
       stripeAccount: accountData.stripe_account_id,
     });
@@ -101,8 +101,9 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errorMsg }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

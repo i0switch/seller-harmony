@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, AlertTriangle, RotateCcw, User } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const mockDiscordUser = {
   username: "user_taro#1234",
@@ -12,19 +12,26 @@ const mockDiscordUser = {
 };
 
 export default function DiscordConfirm() {
-  const navigate = useNavigate();
   const [isConfirming, setIsConfirming] = useState(false);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setIsConfirming(true);
-    setTimeout(() => {
-      navigate("/buyer/discord/result?status=success");
-    }, 1200);
-  };
+    try {
+      const state = crypto.randomUUID();
+      sessionStorage.setItem("discord_oauth_state", state);
 
-  const handleRetry = () => {
-    // Mock: would re-trigger Discord OAuth
-    window.location.reload();
+      const { data, error } = await supabase.functions.invoke('discord-oauth', {
+        body: { redirect_uri: `${window.location.origin}/buyer/discord/result`, state }
+      });
+
+      if (error || !data?.url) throw new Error("Failed to get authorization URL");
+
+      window.location.href = data.url;
+    } catch (err) {
+      console.error(err);
+      setIsConfirming(false);
+      // Optional: Add some error toast or state here if needed
+    }
   };
 
   return (
@@ -83,7 +90,7 @@ export default function DiscordConfirm() {
 
         <Button
           variant="outline"
-          onClick={handleRetry}
+          onClick={handleConfirm}
           disabled={isConfirming}
           className="w-full"
         >

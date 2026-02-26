@@ -16,6 +16,7 @@ interface DiscordAuthResult {
 export default function DiscordResult() {
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code");
+  const state = searchParams.get("state");
   const errorParam = searchParams.get("error");
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [authResult, setAuthResult] = useState<DiscordAuthResult | null>(null);
@@ -34,6 +35,16 @@ export default function DiscordResult() {
       return;
     }
 
+    const savedState = sessionStorage.getItem("discord_oauth_state");
+    if (!state || state !== savedState) {
+      setErrorMessage("セキュリティ検証に失敗しました。もう一度連携をやり直してください。");
+      setStatus("error");
+      return;
+    }
+
+    // Optional: clear state after successful validation
+    sessionStorage.removeItem("discord_oauth_state");
+
     const exchangeCode = async () => {
       try {
         const { data, error } = await supabase.functions.invoke('discord-oauth', {
@@ -50,7 +61,7 @@ export default function DiscordResult() {
           planName: "プラン",
         });
         setStatus("success");
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("OAuth exchange failed:", err);
         setErrorMessage("Discordへの連携に失敗しました。もう一度お試しください。");
         setStatus("error");

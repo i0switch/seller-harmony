@@ -51,7 +51,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Check if seller already has a Stripe account
-    let { data: accountData } = await supabaseClient
+    const { data: accountData } = await supabaseClient
       .from('stripe_connected_accounts')
       .select('*')
       .eq('seller_id', user.id)
@@ -94,8 +94,9 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ url: accountLink.url }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errorMsg }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

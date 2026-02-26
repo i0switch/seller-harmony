@@ -37,13 +37,26 @@ Deno.serve(async (req: Request) => {
     const code = url.searchParams.get('code');
     const redirect_uri = url.searchParams.get('redirect_uri') || 'http://localhost:5173/buyer/discord/result';
 
+    // In POST body (from frontend)
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+    const state = body.state || url.searchParams.get('state') || '';
+
     // If no code, return Discord authorization URL
-    if (!code) {
-      const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect_uri)}&response_type=code&scope=identify%20guilds.join`;
+    if (!code && !body.code) {
+      const stateParam = state ? `&state=${encodeURIComponent(state)}` : '';
+      const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(body.redirect_uri || redirect_uri)}&response_type=code&scope=identify%20guilds.join${stateParam}`;
       return new Response(JSON.stringify({ url: discordAuthUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const actualCode = code || body.code;
+    const actualRedirectUri = body.redirect_uri || redirect_uri;
 
     // Exchange code for token
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -52,8 +65,8 @@ Deno.serve(async (req: Request) => {
         client_id: DISCORD_CLIENT_ID,
         client_secret: DISCORD_CLIENT_SECRET,
         grant_type: 'authorization_code',
-        code,
-        redirect_uri,
+        code: actualCode,
+        redirect_uri: actualRedirectUri,
       }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
@@ -87,8 +100,9 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ success: true, discord_user: meData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errorMsg }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
