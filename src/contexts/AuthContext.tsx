@@ -62,9 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentSession?.user ?? null);
 
         if (currentSession?.user) {
-            // Decode user role
-            const userRole = currentSession.user.user_metadata?.role as Role | undefined;
-            setRole(userRole || "buyer"); // default to buyer
+            // Read role from public.users table (source of truth)
+            const { data } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', currentSession.user.id)
+                .single();
+            setRole((data?.role as Role) || "buyer");
         } else {
             setRole(null);
         }

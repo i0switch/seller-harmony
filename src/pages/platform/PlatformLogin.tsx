@@ -4,17 +4,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlatformAuth } from "@/hooks/useRouteGuard";
+import { useToast } from "@/hooks/use-toast";
 
 export default function PlatformLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@platform.com");
-  const [password, setPassword] = useState("password");
-  const { login } = usePlatformAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login, isLoggedIn } = usePlatformAuth();
+  const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  // If already logged in, redirect
+  if (isLoggedIn) {
+    navigate("/platform/dashboard", { replace: true });
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    login();
-    navigate("/platform/dashboard");
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate("/platform/dashboard");
+    } catch (err: any) {
+      toast({
+        title: "ログイン失敗",
+        description: err.message || "メールアドレスまたはパスワードが正しくありません",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -27,13 +46,15 @@ export default function PlatformLogin() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">メールアドレス</Label>
-            <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">パスワード</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
-          <Button type="submit" className="w-full">ログイン</Button>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "ログイン中..." : "ログイン"}
+          </Button>
         </form>
       </div>
     </div>
