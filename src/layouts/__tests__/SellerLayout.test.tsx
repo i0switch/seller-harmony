@@ -32,6 +32,7 @@ describe('SellerLayout', () => {
         vi.mocked(useSellerAuthModule.useSellerAuth).mockReturnValue({
             isLoggedIn: false,
             isOnboarded: false,
+            isLoading: false,
             currentStep: 'profile',
             login: vi.fn(),
             logout: vi.fn(),
@@ -50,6 +51,7 @@ describe('SellerLayout', () => {
         vi.mocked(useSellerAuthModule.useSellerAuth).mockReturnValue({
             isLoggedIn: true,
             isOnboarded: false,
+            isLoading: false,
             currentStep: 'profile',
             login: vi.fn(),
             logout: vi.fn(),
@@ -68,6 +70,7 @@ describe('SellerLayout', () => {
         vi.mocked(useSellerAuthModule.useSellerAuth).mockReturnValue({
             isLoggedIn: true,
             isOnboarded: true,
+            isLoading: false,
             currentStep: 'complete',
             login: vi.fn(),
             logout: vi.fn(),
