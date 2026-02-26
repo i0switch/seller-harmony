@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { CreditCard, ExternalLink, ArrowLeft } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
 
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 type StripeState = "not_started" | "pending" | "verified" | "restricted";
 const stateLabel: Record<StripeState, string> = { not_started: "未開始", pending: "審査中", verified: "有効", restricted: "制限あり" };
