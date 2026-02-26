@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { MessageCircle, ArrowLeft, CheckCircle, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
 
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 type CheckStatus = "idle" | "checking" | "success" | "error";
 

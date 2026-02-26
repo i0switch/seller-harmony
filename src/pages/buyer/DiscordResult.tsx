@@ -4,7 +4,7 @@ import { CheckCircle, XCircle, AlertTriangle, MessageCircle, RotateCcw, Mail, Ex
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DiscordAuthResult {
   discordUsername: string;
