@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   formatCurrency, formatDateJP,
 } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 function PlanCard({ plan }: { plan: BuyerMembership }) {
   const [expanded, setExpanded] = useState(false);
@@ -152,10 +153,29 @@ function PlanCard({ plan }: { plan: BuyerMembership }) {
 }
 
 export default function MemberMe() {
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [discordUsername, setDiscordUsername] = useState<string | null>(null);
+
   const { data: memberships = [], isLoading, error, refetch } = useQuery({
     queryKey: ["buyer", "memberships"],
     queryFn: () => buyerApi.getMemberships(),
   });
+
+  useEffect(() => {
+    async function fetchUserInfo() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setUserEmail(user.email || "");
+
+      const { data: identity } = await supabase
+        .from("discord_identities")
+        .select("discord_username")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setDiscordUsername(identity?.discord_username || null);
+    }
+    fetchUserInfo();
+  }, []);
 
   if (isLoading) return <LoadingSkeleton type="cards" rows={3} />;
   if (error) return <ErrorBanner error={error} onRetry={refetch} />;
@@ -176,8 +196,8 @@ export default function MemberMe() {
             <User className="h-7 w-7 text-accent" />
           </div>
           <div>
-            <h1 className="font-bold text-lg">user_taro#1234</h1>
-            <p className="text-sm text-muted-foreground">taro.buyer@example.com</p>
+            <h1 className="font-bold text-lg">{discordUsername || userEmail || "ユーザー"}</h1>
+            <p className="text-sm text-muted-foreground">{userEmail}</p>
           </div>
         </div>
       </div>
@@ -202,7 +222,7 @@ export default function MemberMe() {
 
       <div className="space-y-2">
         <Button variant="outline" className="w-full" asChild>
-          <a href="https://billing.stripe.com/p/login/test" target="_blank" rel="noopener noreferrer">
+          <a href={`https://billing.stripe.com/p/login/test`} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="h-4 w-4 mr-2" /> 領収書・請求情報を確認する
           </a>
         </Button>

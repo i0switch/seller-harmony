@@ -41,7 +41,7 @@ export default function OnboardingStripe() {
     }
   };
 
-  const mockComplete = () => setState("verified");
+  
 
   return (
     <OnboardingShell step={1}>
@@ -72,9 +72,8 @@ export default function OnboardingStripe() {
             <Button variant="outline" className="w-full" onClick={startOnboarding} disabled={isLoading}>
               <ExternalLink className="h-4 w-4 mr-2" /> {isLoading ? "Stripeを開く..." : "Stripeオンボーディングを再開"}
             </Button>
-            <Button size="sm" variant="ghost" onClick={mockComplete} className="text-xs text-muted-foreground">
-              （デモ用: 完了にする）
-            </Button>
+
+
           </div>
         )}
 
