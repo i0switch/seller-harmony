@@ -165,6 +165,7 @@ export type Database = {
           risk_flag: boolean
           seller_id: string
           status: Database["public"]["Enums"]["membership_status"]
+          stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           updated_at: string
@@ -184,6 +185,7 @@ export type Database = {
           risk_flag?: boolean
           seller_id: string
           status?: Database["public"]["Enums"]["membership_status"]
+          stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           updated_at?: string
@@ -203,6 +205,7 @@ export type Database = {
           risk_flag?: boolean
           seller_id?: string
           status?: Database["public"]["Enums"]["membership_status"]
+          stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           updated_at?: string
