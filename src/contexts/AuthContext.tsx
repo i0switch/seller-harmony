@@ -14,8 +14,8 @@ interface AuthContextType {
     // Seller specific state
     sellerOnboardingStep: OnboardingStep;
     setSellerOnboardingStep: (step: OnboardingStep) => void;
-    sellerLogin: (email: string, pass: string) => Promise<unknown>;
-    sellerSignup: (email: string, pass: string) => Promise<unknown>;
+    sellerLogin: (email: string, pass: string) => Promise<{ error: { message: string } | null }>;
+    sellerSignup: (email: string, pass: string) => Promise<{ error: { message: string } | null }>;
 
     // Shared actions
     logout: () => Promise<void>;

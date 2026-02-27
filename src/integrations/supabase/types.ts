@@ -159,6 +159,7 @@ export type Database = {
           grace_period_ends_at: string | null
           grace_period_started_at: string | null
           id: string
+          manual_override: boolean | null
           plan_id: string
           revoke_scheduled_at: string | null
           risk_flag: boolean
@@ -177,6 +178,7 @@ export type Database = {
           grace_period_ends_at?: string | null
           grace_period_started_at?: string | null
           id?: string
+          manual_override?: boolean | null
           plan_id: string
           revoke_scheduled_at?: string | null
           risk_flag?: boolean
@@ -195,6 +197,7 @@ export type Database = {
           grace_period_ends_at?: string | null
           grace_period_started_at?: string | null
           id?: string
+          manual_override?: boolean | null
           plan_id?: string
           revoke_scheduled_at?: string | null
           risk_flag?: boolean
