@@ -1,5 +1,4 @@
-// @ts-ignore - edge runtime types
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+/// <reference lib="deno.ns" />
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
