@@ -43,7 +43,7 @@ export default function SellerSignup() {
           <h1 className="text-xl font-bold">🎤 販売者登録</h1>
           <p className="text-sm text-muted-foreground mt-1">ファンクラブを始めましょう</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           {errors.form && <p className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">{errors.form}</p>}
           <div className="space-y-2">
             <Label>表示名</Label>
