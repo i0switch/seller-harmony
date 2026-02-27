@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router-dom";
-import { mockTenants, mockAlerts, tenantStatusLabel, tenantStatusVariant, stripeStatusLabel, formatCurrency, formatDateTimeJP, formatDateJP } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { tenantStatusLabel, tenantStatusVariant, stripeStatusLabel, formatCurrency, formatDateTimeJP, formatDateJP } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, AlertCircle, AlertTriangle, Info, Pause, Play } from "lucide-react";
@@ -7,13 +8,47 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { platformApi } from "@/services/api";
+import { ErrorBanner, LoadingSkeleton } from "@/components/shared";
 
 const alertIcon = { error: AlertCircle, warning: AlertTriangle, info: Info };
 const alertColor = { error: "text-destructive", warning: "text-warning", info: "text-accent" };
 
 export default function PlatformTenantDetail() {
   const { id } = useParams();
-  const tenant = mockTenants.find((t) => t.id === id);
+
+  const { data: tenant, isLoading: tenantLoading, error: tenantError } = useQuery({
+    queryKey: ["platform", "tenants", id],
+    queryFn: () => platformApi.getTenantById(id!),
+    enabled: !!id,
+  });
+
+  const { data: allAlerts, isLoading: alertsLoading } = useQuery({
+    queryKey: ["platform", "alerts"],
+    queryFn: () => platformApi.getAlerts(),
+  });
+
+  if (tenantError) {
+    return (
+      <div className="space-y-4">
+        <Link to="/platform/tenants" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> テナント一覧へ戻る
+        </Link>
+        <ErrorBanner error={tenantError} />
+      </div>
+    );
+  }
+
+  if (tenantLoading || alertsLoading) {
+    return (
+      <div className="space-y-4">
+        <Link to="/platform/tenants" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> テナント一覧へ戻る
+        </Link>
+        <LoadingSkeleton type="cards" rows={2} />
+      </div>
+    );
+  }
 
   if (!tenant) {
     return (
@@ -26,7 +61,7 @@ export default function PlatformTenantDetail() {
     );
   }
 
-  const tenantAlerts = mockAlerts.filter((a) => a.tenantName === tenant.name && !a.resolved);
+  const tenantAlerts = (allAlerts || []).filter((a) => a.tenantName === tenant.name && !a.resolved);
 
   return (
     <div className="space-y-6">

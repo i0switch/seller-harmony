@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { planTypeLabel, planStatusLabel, formatCurrency, type PlanType, type GrantPolicy } from "@/lib/mockData";
-import type { SellerPlan } from "@/types";
+import type { SellerPlan, PlanType, GrantPolicy } from "@/types";
+import { planTypeLabel, planStatusLabel, formatCurrency } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

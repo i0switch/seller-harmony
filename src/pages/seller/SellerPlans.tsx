@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { planStatusLabel, planStatusVariant, planTypeLabel, formatCurrency, type PlanStatus } from "@/lib/mockData";
-import type { SellerPlan } from "@/types";
+import type { SellerPlan, PlanStatus } from "@/types";
+import { planStatusLabel, planStatusVariant, planTypeLabel, formatCurrency } from "@/types";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

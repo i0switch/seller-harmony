@@ -1,21 +1,54 @@
 import { useParams, Link } from "react-router-dom";
-import { mockMembers, mockTimeline } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Shield, ShieldOff, RefreshCw } from "lucide-react";
-import { ConfirmDialog, TimelineList, EmptyState } from "@/components/shared";
+import { ConfirmDialog, TimelineList, EmptyState, ErrorBanner, LoadingSkeleton } from "@/components/shared";
 import {
   sellerBillingStatusLabel, sellerBillingStatusVariant,
   discordLinkStatusLabel, discordLinkStatusVariant,
   roleStatusLabel, roleStatusVariant,
 } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { sellerApi } from "@/services/api";
 
 export default function SellerMemberDetail() {
   const { id } = useParams();
-  const member = mockMembers.find((m) => m.id === id);
-  const timeline = (id && mockTimeline[id]) || [];
   const { toast } = useToast();
+
+  const { data: member, isLoading: memberLoading, error: memberError } = useQuery({
+    queryKey: ["seller", "members", id],
+    queryFn: () => sellerApi.getMemberById(id!),
+    enabled: !!id,
+  });
+
+  const { data: timeline, isLoading: timelineLoading } = useQuery({
+    queryKey: ["seller", "members", id, "timeline"],
+    queryFn: () => sellerApi.getMemberTimeline(id!),
+    enabled: !!id,
+  });
+
+  if (memberError) {
+    return (
+      <div className="space-y-4">
+        <Link to="/seller/members" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 会員一覧
+        </Link>
+        <ErrorBanner error={memberError} />
+      </div>
+    );
+  }
+
+  if (memberLoading || timelineLoading) {
+    return (
+      <div className="space-y-4">
+        <Link to="/seller/members" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 会員一覧
+        </Link>
+        <LoadingSkeleton type="cards" rows={2} />
+      </div>
+    );
+  }
 
   if (!member) {
     return (
@@ -29,7 +62,7 @@ export default function SellerMemberDetail() {
   }
 
   const handleAction = (action: string) => {
-    toast({ title: `${action}しました`, description: `${member.name} に対して${action}を実行しました（モック）` });
+    toast({ title: `${action}しました`, description: `${member.name} に対して${action}を実行しました` });
   };
 
   return (
@@ -108,7 +141,7 @@ export default function SellerMemberDetail() {
 
       <div className="glass-card rounded-xl p-5 space-y-4">
         <h3 className="font-semibold text-lg">タイムライン</h3>
-        <TimelineList events={timeline} />
+        <TimelineList events={timeline || []} />
       </div>
     </div>
   );

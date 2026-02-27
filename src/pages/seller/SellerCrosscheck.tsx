@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { crosscheckJudgmentLabel, crosscheckJudgmentVariant, billingStatusLabel, billingStatusVariant, roleStatusLabel, roleStatusVariant, formatDateTimeJP, type CrosscheckJudgment } from "@/lib/mockData";
+import { crosscheckJudgmentLabel, crosscheckJudgmentVariant, sellerBillingStatusLabel as billingStatusLabel, sellerBillingStatusVariant as billingStatusVariant, roleStatusLabel, roleStatusVariant, formatDateTimeJP } from "@/types";
+import type { CrosscheckJudgment } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

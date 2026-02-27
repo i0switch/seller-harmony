@@ -1,27 +1,27 @@
 import { useState, useMemo } from "react";
-import { mockWebhooks } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { FilterBar, EmptyState, ConfirmDialog } from "@/components/shared";
+import { FilterBar, EmptyState, ConfirmDialog, ErrorBanner, LoadingSkeleton } from "@/components/shared";
 import { webhookStatusLabel, webhookStatusVariant, formatDateTimeJP, type WebhookProcessStatus } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { sellerApi } from "@/services/api";
 
 export default function SellerWebhooks() {
-  const tenantWebhooks = useMemo(() => mockWebhooks.filter((w) => w.tenantId === "t1"), []);
   const [statusFilter, setStatusFilter] = useState<WebhookProcessStatus | "all">("all");
   const [detailId, setDetailId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const filtered = useMemo(() => {
-    let list = [...tenantWebhooks];
-    if (statusFilter !== "all") list = list.filter((w) => w.processStatus === statusFilter);
-    list.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
-    return list;
-  }, [statusFilter, tenantWebhooks]);
+  const { data: webhooks, isLoading, error, refetch } = useQuery({
+    queryKey: ["seller", "webhooks", statusFilter],
+    queryFn: () => sellerApi.getWebhooks({ status: statusFilter !== "all" ? statusFilter : undefined }),
+  });
 
-  const detail = detailId ? tenantWebhooks.find((w) => w.id === detailId) : null;
+  const items = webhooks?.items ?? [];
+
+  const detail = detailId ? items.find((w) => w.id === detailId) : null;
 
   const handleReprocess = (eventType: string) => {
     toast({ title: "再処理を開始", description: `${eventType} の再処理を開始しました` });
@@ -44,11 +44,15 @@ export default function SellerWebhooks() {
         }]}
       />
 
-      {filtered.length === 0 ? (
+      {error ? (
+        <ErrorBanner error={error} onRetry={refetch} />
+      ) : isLoading ? (
+        <LoadingSkeleton type="cards" rows={3} />
+      ) : items.length === 0 ? (
         <EmptyState title="Webhookイベントがありません" />
       ) : (
         <div className="space-y-3">
-          {filtered.map((w) => (
+          {items.map((w) => (
             <div key={w.id} className="glass-card rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs font-semibold">{w.eventType}</span>

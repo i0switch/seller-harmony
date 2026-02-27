@@ -5,8 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import SellerCrosscheck from '../SellerCrosscheck';
 import { sellerApi } from '@/services/api';
-import { CrosscheckJudgment, RoleStatus } from '@/lib/mockData';
-import type { CrosscheckRow } from '@/types';
+import type { CrosscheckRow, CrosscheckJudgment, RoleStatus } from '@/types';
 
 
 vi.mock('@/services/api', () => ({

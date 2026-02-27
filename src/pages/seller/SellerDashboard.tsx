@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Package, TrendingUp, TrendingDown, UserPlus, Webhook, CreditCard, AlertTriangle, Megaphone, MessageCircle } from "lucide-react";
-import { formatCurrency, stripeStatusLabel } from "@/lib/mockData";
+import { formatCurrency, stripeStatusLabel } from "@/types";
 import { sellerApi } from "@/services/api";
 import { ErrorBanner } from "@/components/shared";
 

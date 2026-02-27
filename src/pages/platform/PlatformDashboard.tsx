@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { platformApi } from "@/services/api";
-import { formatDateTimeJP } from "@/lib/mockData";
+import { formatDateTimeJP } from "@/types";
 import { ErrorBanner } from "@/components/shared";
 
 const alertIcon = { error: AlertCircle, warning: AlertTriangle, info: Info };
