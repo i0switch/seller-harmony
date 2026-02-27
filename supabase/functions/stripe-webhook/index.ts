@@ -1,5 +1,4 @@
-// @ts-ignore - edge runtime types
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+/// <reference lib="deno.ns" />
 import Stripe from 'npm:stripe@^14.0.0';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -23,7 +22,7 @@ async function writeAuditLog(
   try {
     await supabaseAdmin.from('audit_logs').insert({
       action,
-      details,
+      after_state: details as unknown as Record<string, unknown>,
       correlation_id: correlationId,
     });
   } catch (err) {

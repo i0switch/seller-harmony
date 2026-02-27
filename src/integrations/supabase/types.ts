@@ -71,6 +71,8 @@ export type Database = {
           discord_user_id: string
           discord_username: string | null
           id: string
+          oauth_state: string | null
+          oauth_state_created_at: string | null
           refresh_token: string | null
           token_expires_at: string | null
           updated_at: string
@@ -82,6 +84,8 @@ export type Database = {
           discord_user_id: string
           discord_username?: string | null
           id?: string
+          oauth_state?: string | null
+          oauth_state_created_at?: string | null
           refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string
@@ -93,6 +97,8 @@ export type Database = {
           discord_user_id?: string
           discord_username?: string | null
           id?: string
+          oauth_state?: string | null
+          oauth_state_created_at?: string | null
           refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string
@@ -548,7 +554,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["user_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       announcement_severity: "info" | "warning" | "critical"
