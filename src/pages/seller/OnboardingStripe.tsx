@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreditCard, ExternalLink, ArrowLeft } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
+import { useSellerAuth } from "@/hooks/useSellerAuth";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -13,8 +14,14 @@ const stateVariant: Record<StripeState, "outline" | "secondary" | "default" | "d
 
 export default function OnboardingStripe() {
   const navigate = useNavigate();
+  const { isOnboarded } = useSellerAuth();
   const [state, setState] = useState<StripeState>("not_started");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Guard: redirect to dashboard if already onboarded
+  if (isOnboarded) {
+    return <Navigate to="/seller/dashboard" replace />;
+  }
 
   const startOnboarding = async () => {
     setIsLoading(true);

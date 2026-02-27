@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
+import { useSellerAuth } from "@/hooks/useSellerAuth";
 
 export default function OnboardingProfile() {
   const navigate = useNavigate();
+  const { isOnboarded } = useSellerAuth();
+
+  // Guard: redirect to dashboard if already onboarded
+  if (isOnboarded) {
+    return <Navigate to="/seller/dashboard" replace />;
+  }
+
   const [displayName, setDisplayName] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [supportEmail, setSupportEmail] = useState("");

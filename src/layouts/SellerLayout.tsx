@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, Navigate } from "react-router-dom";
+import { Link, Outlet, useLocation, Navigate, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Package, Users, CheckSquare, Webhook, Settings, LogOut, Menu, X,
 } from "lucide-react";
@@ -17,7 +17,13 @@ const navItems = [
 export default function SellerLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isOnboarded, isLoggedIn, isLoading } = useSellerAuth();
+  const { isOnboarded, isLoggedIn, isLoading, logout } = useSellerAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/seller/login", { replace: true });
+  };
 
   // Wait for auth to initialize
   if (isLoading) {
@@ -47,10 +53,10 @@ export default function SellerLayout() {
           </button>
           <span className="text-sm font-semibold">🎤 Seller Dashboard</span>
         </div>
-        <Link to="/seller/login" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+        <button onClick={handleLogout} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
           <LogOut className="h-3.5 w-3.5" />
           ログアウト
-        </Link>
+        </button>
       </header>
 
       <div className="flex flex-1">

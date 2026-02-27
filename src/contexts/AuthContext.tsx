@@ -94,6 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const logout = async () => {
         await supabase.auth.signOut();
+        localStorage.removeItem("seller_onboarding_step");
+        setSellerOnboardingStep("profile");
+        setSession(null);
+        setUser(null);
+        setRole(null);
     };
 
     const value: AuthContextType = {

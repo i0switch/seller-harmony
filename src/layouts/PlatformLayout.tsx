@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, Navigate } from "react-router-dom";
+import { Link, Outlet, useLocation, Navigate, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, Webhook, RefreshCw, Megaphone, Settings, LogOut, Menu, X,
 } from "lucide-react";
@@ -17,7 +17,13 @@ const navItems = [
 export default function PlatformLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { isLoggedIn } = usePlatformAuth();
+  const { isLoggedIn, logout } = usePlatformAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/platform/login", { replace: true });
+  };
 
   // Route guard: redirect to login if not authenticated
   if (!isLoggedIn) {
@@ -51,10 +57,10 @@ export default function PlatformLayout() {
         </nav>
 
         <div className="p-3 border-t border-sidebar-border">
-          <Link to="/platform/login" className="flex items-center gap-3 px-3 py-2.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg">
+          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg w-full">
             <LogOut className="h-4 w-4" />
             ログアウト
-          </Link>
+          </button>
         </div>
       </aside>
 

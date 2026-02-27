@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, ArrowLeft, CheckCircle, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
+import { useToast } from "@/hooks/use-toast";
+import { useSellerAuth } from "@/hooks/useSellerAuth";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -28,14 +30,26 @@ const errorMessages: Record<string, string> = {
 
 export default function OnboardingDiscord() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { isOnboarded } = useSellerAuth();
   const [guildId, setGuildId] = useState("");
+
+  // Guard: redirect to dashboard if already onboarded
+  if (isOnboarded) {
+    return <Navigate to="/seller/dashboard" replace />;
+  }
+
   const [roleId, setRoleId] = useState("");
   const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
   const [validation, setValidation] = useState<ValidationResult | null>(null);
 
   const runValidation = async () => {
     if (!guildId.trim() || !roleId.trim()) {
-      alert("サーバーIDと役割(Role)IDを入力してください");
+      toast({
+        title: "入力エラー",
+        description: "サーバーIDと役割(Role)IDを入力してください",
+        variant: "destructive",
+      });
       return;
     }
     setCheckStatus("checking");

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { CheckCircle } from "lucide-react";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
@@ -6,7 +6,12 @@ import { useSellerAuth } from "@/hooks/useSellerAuth";
 
 export default function OnboardingComplete() {
   const navigate = useNavigate();
-  const { completeOnboarding } = useSellerAuth();
+  const { completeOnboarding, isOnboarded } = useSellerAuth();
+
+  // Guard: redirect to dashboard if already onboarded
+  if (isOnboarded) {
+    return <Navigate to="/seller/dashboard" replace />;
+  }
 
   const handleGoToDashboard = () => {
     completeOnboarding();
