@@ -28,6 +28,13 @@ export async function mockSellerAuth(page: Page) {
     await page.route('**/auth/v1/user*', async (route) => {
         await route.fulfill({ json: mockUser });
     });
+
+    // GET /rest/v1/users?select=role&id=eq.<uid>
+    await page.route('**/rest/v1/users*', async (route) => {
+        await route.fulfill({
+            json: { role: 'seller' },
+        });
+    });
 }
 
 /** Mock the Supabase Auth endpoints for a Buyer user */
@@ -53,6 +60,12 @@ export async function mockBuyerAuth(page: Page) {
     });
     await page.route('**/auth/v1/user*', async (route) => {
         await route.fulfill({ json: mockUser });
+    });
+
+    await page.route('**/rest/v1/users*', async (route) => {
+        await route.fulfill({
+            json: { role: 'buyer' },
+        });
     });
 }
 

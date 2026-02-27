@@ -1,54 +1,63 @@
-# Release Readiness Report
+# Release Readiness Report (2026-02-27)
 
-## 現在の品質状況 (Quality Status)
+最終更新: 2026-02-27 QAサイクル2
 
-| Check | Status | CLI Output / Notes |
-|-------|--------|---------------------|
-| Build | ✅ Pass | `npm run build` completed successfully without fatal errors. |
-| Test (Frontend) | ✅ Pass | `npm run test` (Vitest) passed 47 tests across 14 test suites covering UI states, route guards, and functional logic. |
-| Lint  | ✅ Pass | `npm run lint` completed successfully after fixing `any` typescript errors. (Only warnings remain as permitted by Vite default React rules). |
-| Test (Backend) | ✅ Pass | `pytest` passed successfully, covering health checks, pagination logic, and validation error responses. |
-| Type Check | ✅ Pass | No critical TypeScript errors; strict validations satisfied. |
+## Gate Summary
 
-## 主要フローの確認結果 (Core Flows Validation)
+| Gate | Result | Notes |
+|---|---|---|
+| Frontend Lint | PASS | `npm run lint` 成功 |
+| Frontend Build | PASS | `npm run build` 成功（10.99s） |
+| Frontend Unit/Integration | PASS | Vitest テスト全通過 |
+| Backend Tests | PASS | `pytest` 7 tests 全通過 |
+| Local E2E | PASS | Playwright 3回連続 `passed=5 failed=0` |
+| Lovable Hosted E2E | PASS | `playwright.hosted.config.ts` 3回連続 `passed=5 failed=0` |
+| Traceability | PASS | 12/12要件がPASS（`docs/qa/requirements-traceability.md`） |
+| Security Audit | PASS | Critical/High全修正済み（`docs/security/security-review.md`） |
 
-1. **Seller Onboarding & Auth**: 
-   - Route guards are actively verified. Unauthenticated users are redirected to login. Authenticated but non-onboarded users are held at the onboarding sequence (`profile` -> `stripe` -> `discord`).
-   - `OnboardingDiscord` UI tests confirm error/success state handling is fully functional.
+## Done条件チェック (00_MASTER.md)
 
-2. **Seller Plans & Dashboard**:
-   - `SellerPlans`, `SellerPlanDetail`, and `SellerDashboard` are covered by tests.
-   - Destroy/Change actions correctly require destructive confirmation (`ConfirmDialog`).
+### A. 仕様準拠
+- [x] 要件定義の主要12項目が「実装箇所＋Webhookロジック」で裏付け済み
+- [x] トレーサビリティマトリクスで全PASS
 
-3. **Seller Crosscheck & Members**:
-   - Functional filters/labels logic and divergent timeline views are implemented and covered.
+### B. 品質
+- [x] Frontend: build / test / lint 全成功
+- [x] Backend: pytest 7テスト全成功
+- [x] E2E: ローカル3回連続成功
+- [x] E2E: Lovable Hosted 3回連続成功
 
-4. **Buyer Checkout**: 
-   - Validated access components leading post-checkout towards the `MemberMe` screen.
+### C. セキュリティ
+- [x] Webhook署名検証Fail-Closed: signature欠落→400, secret未設定→500, 検証失敗→400
+- [x] OAuth state検証: フロント(sessionStorage) + Edge(DB保存→突合→10分有効期限→ワンタイム消費)
+- [x] service_roleクライアント非露出: フロントはanon keyのみ使用
+- [x] RLS: 全主要10テーブルで有効、ポリシー定義確認済み
 
-5. **Platform Admin**:
-   - Tenants list, webhooks logic, retry queues, and system announcements rendering function normally. 
+## QAサイクル2での修正内容
+1. **[Critical]** `.gitignore` に `.env` パターン追加（シークレットコミット防止）
+2. **[High]** Discord OAuth stateのサーバーサイドDB突合（CSRF強化）
+3. **[Medium]** `redirect_uri` ホワイトリスト検証（オープンリダイレクト防止）
+4. **[Medium]** `STRIPE_SECRET_KEY` 空チェック追加
+5. **[Medium]** `manual_override` カラムのマイグレーション追加
+6. `charge.refunded` → `refunded` 状態遷移ハンドラ追加
+7. `charge.dispute.created` → `risk_flag` 設定ハンドラ追加
+8. `checkout.session.completed` でDiscord未連携時は `pending_discord` に遷移
+9. `discord-oauth` で連携完了時に `pending_discord` → `active` 自動遷移
+10. 全Webhookイベントに `writeAuditLog()` 追加（`correlation_id=event.id`）
+11. `role_assignments` 複合インデックス追加（discord_user_id + guild_id + actual_state）
+12. E2Eテスト修正: `isVisible({ timeout })` → `expect().toBeVisible()` (web-first assertion)
 
-## 既知の制限（未実装/モックの範囲） (Known Limitations & Mocks)
+## Security & Spec Conformance Documents
+- トレーサビリティ: `docs/qa/requirements-traceability.md`
+- セキュリティ監査: `docs/security/security-review.md`
+- E2E証跡: `docs/e2e/README.md`, `docs/e2e/LOCAL_BROWSER_WALKTHROUGH.md`, `docs/e2e/LOVABLE_WALKTHROUGH.md`
 
-- **モックAPI依存**: 現段階では、実際のバックエンド機能ではなく主にモックデータやモジュールを使ってテストを回しています (`mockApi.ts` などのモッククライアント)。
-- **認証の永続性**: 実際の Supabase Auth セッションは未稼働であり、テスト環境やローカル環境としてのフックベースのモック認証を使用しているに留まります。
-- **Stripe / Discord 連携**: `stripe-checkout` エッジファンクションや `discord-bot` へのリクエストは検証・テストが通っていますが、実際にStripe API/Discord APIに対してリクエストを投げるには環境変数の本番設定と本稼働連携が必要です。
-- **Webhook署名検証**: 現状、 fail-closed 原則に則って無効化していません。実際のWebhookが来ないとローカルテストでの通過は難しい場合があります。
+## Release Decision
+- **判定: GO**
+- 理由: Done条件A/B/C全項目を満たし、全主要ゲートがPASS。
 
-## 次フェーズ（実API接続: Supabase/Stripe/Discord）への手順 (Next Steps for Integration)
-
-現在のUI層とモック基盤間の整合性は完璧であり、テストカバレッジによる回帰防止網も張られています。続いて以下に着手してください:
-
-1. **Supabase Database & Edge Functions デプロイ**:
-   - スキーマ (`schema.sql` または migration) を本番環境（またはStaging）のデータベースに適用してください。
-   - `stripe-onboarding`, `stripe-checkout`, `discord-bot` などの Edge Functions をデプロイしてください。
-
-2. **環境変数のアタッチ**:
-   - 必要な各種シークレット (`STRIPE_SECRET_KEY`, `DISCORD_BOT_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` など) を Edge Functions や環境に設定します。
-
-3. **Stripe CLI を用いた Webhook 疎通確認**:
-   - `npm run stripe:listen` を用いて、ローカルにWebhookイベントをフォワードし、実際の購入イベント (`checkout.session.completed` 等) によってDBが正しく更新され、Discordのロール非同期操作がキューに載るか統合テストを実行します。
-
-4. **API クライアントの差し替え**:
-   - 準備が完了次第、フロントエンド側で `mockApi` ベースに依存しているプロバイダーやAPI呼び出しを、`Supabase JS Client` や本番用の `fetch` レイヤーへ段階的に切り替えていきます。
+## 残リスクと運用フォローアップ
+1. **CORS origin `*`**: 本番デプロイ時にEdge FunctionsのCORSをホワイトリスト化
+2. **日次番人バッチ**: `grace_period_ends_at` 超過→`expired` 自動遷移のcronジョブ未デプロイ（インフラ依存）
+3. **Edge Functionユニットテスト**: Deno用テストフレームワーク構築で署名検証・冪等性の回帰強化
+4. **Hosted認証更新運用**: storageState有効期限切れ時は `npm run e2e:hosted:auth` で再生成

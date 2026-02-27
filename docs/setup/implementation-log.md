@@ -63,3 +63,23 @@
 - **修正内容**: `as any` を `as never` に修正し、Lintルールに準拠させた。
 - **再実行結果**: 成功 (npm run lint, npm run test ともに通過)
 - **次にやること**: 主要フロー（Seller/Buyer/Platform）のテストカバレッジ確認と、不足している必須テストの追加。
+
+## Phase 1: Planning and Traceability (Gaps Fixes)
+- **日時**: 2026/02/27
+- **実施内容**: 要件トレーサビリティに基づく実装ギャップの修正。
+- **結果**:
+  - `memberships` テーブルに `manual_override` カラムを追加。
+  - `audit_logs` に `action` 制約を追加 (`override`, `grant_role` 等を許容)。
+  - `stripe-webhook` に `grace_period` 回復、`cancel_scheduled` 遷移、`manual_override` 考慮ロジックを実装。
+  - `discord-oauth` に `state` 入力必須化と `save` パラメータ（確認ステップ用）を実装。
+  - `DiscordResult.tsx` を修正し、OAuth後にUsernameを確認するステップを導入。
+- **次にやること**: 02_SECURITY_SUPABASE に基づくセキュリティ監査の実施。
+
+## Phase 2: Security and Infrastructure Audit (02_SECURITY_SUPABASE)
+- **日時**: 2026/02/27
+- **実施内容**: Supabase RLS、Edge Functions、トリガーのセキュリティ監査と修正。
+- **結果**:
+  - `discord_identities`, `audit_logs`, `stripe_webhook_events`, `role_assignments` のRLS欠落を修正。
+  - `discord-bot` 関数にサーバー所有権確認ロジックを追加。
+  - `handle_new_user` トリガーを修正し、`platform_admin` への自己昇格を防止。
+- **次にやること**: 03_E2E_LOCAL に基づくローカルテスト環境の整備と既存テストの修正。

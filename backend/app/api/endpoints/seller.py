@@ -26,9 +26,17 @@ async def get_plans() -> list[Any]:
         {"id": "p1", "name": "Basic Plan", "price": 1000, "status": "active", "stripeProductId": "prod_1", "roleId": "r1"}
     ]
 
+@router.post("/plans")
+async def create_plan(plan: dict) -> Any:
+    return {"id": "p_new", "status": "success", **plan}
+
 @router.get("/plans/{plan_id}")
 async def get_plan_by_id(plan_id: str) -> Any:
     return {"id": plan_id, "name": "Basic Plan", "price": 1000, "status": "active", "stripeProductId": "prod_1", "roleId": "r1"}
+
+@router.put("/plans/{plan_id}")
+async def update_plan(plan_id: str, plan: dict) -> Any:
+    return {"id": plan_id, "status": "success", **plan}
 
 @router.get("/members")
 async def get_members(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)) -> PaginatedResponse[Any]:
@@ -50,6 +58,10 @@ async def get_member_timeline(member_id: str) -> list[Any]:
 @router.get("/crosscheck")
 async def get_crosscheck() -> list[Any]:
     return []
+
+@router.post("/crosscheck/sync")
+async def sync_crosscheck() -> Any:
+    return {"status": "success", "syncedCount": 5}
 
 @router.get("/webhooks")
 async def get_webhooks(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)) -> PaginatedResponse[Any]:

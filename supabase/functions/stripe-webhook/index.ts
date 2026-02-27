@@ -6,6 +6,30 @@ const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 const DISCORD_BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') ?? '';
 
+// Fail-closed: Reject if critical secrets are not configured
+if (!STRIPE_SECRET_KEY) {
+  console.error('STRIPE_SECRET_KEY is not configured. Webhook handler will reject all requests.');
+}
+
+/**
+ * Write an entry to audit_logs with correlation_id linked to the Stripe event.
+ */
+async function writeAuditLog(
+  action: string,
+  details: Record<string, unknown>,
+  correlationId: string
+) {
+  try {
+    await supabaseAdmin.from('audit_logs').insert({
+      action,
+      details,
+      correlation_id: correlationId,
+    });
+  } catch (err) {
+    console.error('Failed to write audit log:', err);
+  }
+}
+
 const stripe = new Stripe(STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 });
@@ -112,7 +136,7 @@ async function removeDiscordRole(userId: string, sellerId: string, planId: strin
           console.error(`Discord role removal failed: ${res.status} ${await res.text()}`);
         }
       } else {
-        console.log(`Skipped removing role ${plan.discord_role_id} due to another active membership.`);
+        console.log('Skipped removing role due to another active membership.');
       }
     }
   } catch (err) {
@@ -185,56 +209,201 @@ Deno.serve(async (req: Request) => {
       const { buyer_id, plan_id, seller_id } = session.metadata || {};
 
       if (buyer_id && plan_id && seller_id) {
+        // Check if the buyer already has a Discord identity linked
+        const { data: discordIdentity } = await supabaseAdmin
+          .from('discord_identities')
+          .select('id')
+          .eq('user_id', buyer_id)
+          .maybeSingle();
+
+        const initialStatus = discordIdentity ? 'active' : 'pending_discord';
+
         await supabaseAdmin.from('memberships').upsert(
           {
             buyer_id,
             plan_id,
             seller_id,
-            status: 'active',
+            status: initialStatus,
             stripe_subscription_id: (session.subscription as string) || null,
             stripe_customer_id: (session.customer as string) || null,
+            entitlement_ends_at: null, // Reset if it was previously canceled
           },
           { onConflict: 'buyer_id,plan_id' }
         );
-        await assignDiscordRole(buyer_id, seller_id, plan_id);
+
+        if (discordIdentity) {
+          await assignDiscordRole(buyer_id, seller_id, plan_id);
+        }
+
+        await writeAuditLog('create', {
+          entity: 'membership',
+          buyer_id,
+          plan_id,
+          seller_id,
+          status: initialStatus,
+        }, event.id);
+      }
+    } else if (event.type === 'invoice.payment_succeeded') {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (invoice.subscription) {
+        // Recover status from grace_period to active upon successful payment
+        await supabaseAdmin
+          .from('memberships')
+          .update({
+            status: 'active',
+            grace_period_started_at: null,
+            grace_period_ends_at: null
+          })
+          .eq('stripe_subscription_id', invoice.subscription)
+          .eq('status', 'grace_period');
+
+        await writeAuditLog('update', {
+          entity: 'membership',
+          action_detail: 'grace_period_recovered',
+          subscription_id: invoice.subscription,
+        }, event.id);
       }
     } else if (event.type === 'invoice.payment_failed') {
       const invoice = event.data.object as Stripe.Invoice;
       if (invoice.subscription) {
+        // Transition to grace_period
+        const now = new Date();
+        const endsAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // default 3 days grace period
         await supabaseAdmin
           .from('memberships')
-          .update({ status: 'grace_period' })
+          .update({
+            status: 'grace_period',
+            grace_period_started_at: now.toISOString(),
+            grace_period_ends_at: endsAt.toISOString()
+          })
           .eq('stripe_subscription_id', invoice.subscription);
+
+        await writeAuditLog('update', {
+          entity: 'membership',
+          action_detail: 'payment_failed_grace_period',
+          subscription_id: invoice.subscription,
+        }, event.id);
       }
     } else if (event.type === 'customer.subscription.updated') {
       const sub = event.data.object as Stripe.Subscription;
       if (sub.cancel_at_period_end) {
         await supabaseAdmin
           .from('memberships')
-          .update({ status: 'cancel_scheduled' })
+          .update({
+            status: 'cancel_scheduled',
+            revoke_scheduled_at: new Date(sub.current_period_end * 1000).toISOString()
+          })
           .eq('stripe_subscription_id', sub.id);
+
+        await writeAuditLog('cancel', {
+          entity: 'membership',
+          action_detail: 'cancel_scheduled',
+          subscription_id: sub.id,
+          period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        }, event.id);
       } else if (sub.status === 'active') {
-        // Recovered from grace period
+        // Full recovery or state sync
         await supabaseAdmin
           .from('memberships')
           .update({ status: 'active' })
-          .eq('stripe_subscription_id', sub.id);
+          .eq('stripe_subscription_id', sub.id)
+          .not('status', 'in', '("cancel_scheduled")');
       }
     } else if (event.type === 'customer.subscription.deleted') {
       const sub = event.data.object as Stripe.Subscription;
       const { data: membership } = await supabaseAdmin
         .from('memberships')
-        .select('buyer_id, seller_id, plan_id')
+        .select('buyer_id, seller_id, plan_id, manual_override')
         .eq('stripe_subscription_id', sub.id)
         .single();
 
       if (membership) {
         await supabaseAdmin
           .from('memberships')
-          .update({ status: 'canceled' })
+          .update({
+            status: 'canceled',
+            entitlement_ends_at: new Date().toISOString()
+          })
           .eq('stripe_subscription_id', sub.id);
 
-        await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+        // Respect manual override: do not revoke if flag is true
+        if (!membership.manual_override) {
+          await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+          await writeAuditLog('revoke_role', {
+            entity: 'membership',
+            buyer_id: membership.buyer_id,
+            plan_id: membership.plan_id,
+            reason: 'subscription_deleted',
+          }, event.id);
+        } else {
+          console.log('Manual override active. Skipping role removal.');
+          await writeAuditLog('override', {
+            entity: 'membership',
+            buyer_id: membership.buyer_id,
+            plan_id: membership.plan_id,
+            reason: 'manual_override_active',
+          }, event.id);
+        }
+      }
+    } else if (event.type === 'charge.refunded') {
+      // ─── Handle charge.refunded → transition to refunded ───
+      const charge = event.data.object as Stripe.Charge;
+      const invoiceId = charge.invoice as string | null;
+      if (invoiceId) {
+        // Retrieve the invoice to find the subscription
+        const invoice = await stripe.invoices.retrieve(invoiceId);
+        if (invoice.subscription) {
+          const { data: membership } = await supabaseAdmin
+            .from('memberships')
+            .select('buyer_id, seller_id, plan_id, manual_override')
+            .eq('stripe_subscription_id', invoice.subscription)
+            .single();
+
+          if (membership) {
+            await supabaseAdmin
+              .from('memberships')
+              .update({ status: 'refunded' })
+              .eq('stripe_subscription_id', invoice.subscription);
+
+            if (!membership.manual_override) {
+              await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+            }
+
+            await writeAuditLog('refund', {
+              entity: 'membership',
+              buyer_id: membership.buyer_id,
+              plan_id: membership.plan_id,
+              charge_id: charge.id,
+            }, event.id);
+          }
+        }
+      }
+    } else if (event.type === 'charge.dispute.created') {
+      // ─── Handle charge.dispute.created → set risk_flag ───
+      const dispute = event.data.object as Stripe.Dispute;
+      const chargeId = dispute.charge as string;
+      if (chargeId) {
+        const charge = await stripe.charges.retrieve(chargeId);
+        const invoiceId = charge.invoice as string | null;
+        if (invoiceId) {
+          const invoice = await stripe.invoices.retrieve(invoiceId);
+          if (invoice.subscription) {
+            await supabaseAdmin
+              .from('memberships')
+              .update({
+                risk_flag: true,
+                dispute_status: dispute.status,
+              })
+              .eq('stripe_subscription_id', invoice.subscription);
+
+            await writeAuditLog('update', {
+              entity: 'membership',
+              action_detail: 'dispute_created',
+              dispute_id: dispute.id,
+              dispute_status: dispute.status,
+            }, event.id);
+          }
+        }
       }
     }
 

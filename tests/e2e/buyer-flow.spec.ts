@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { mockDiscordOAuth } from './fixtures/auth.fixture';
 
 test.describe('Buyer Flow', () => {
     test('completes buyer return from checkout and discord connection', async ({ page }) => {
@@ -14,15 +13,23 @@ test.describe('Buyer Flow', () => {
         // ── 2. Discord Confirm Page ────────────────────────────────────────
         await expect(page).toHaveURL(/\/buyer\/discord\/confirm/, { timeout: 8000 });
 
-        // Mock the discord-oauth Edge Function BEFORE clicking so route is registered
-        await mockDiscordOAuth(page);
+        // Mock the discord-oauth Edge Function
+        let apiCallCount = 0;
+        await page.route('**/functions/v1/discord-oauth*', async (route) => {
+            apiCallCount++;
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    success: true,
+                    saved: apiCallCount > 1,
+                    discord_user: { id: '111222333444', username: 'E2E_Buyer', discriminator: '0', avatar: null }
+                }),
+            });
+        });
 
         // ── 3. Set CSRF state in sessionStorage, then simulate OAuth callback ─
         const mockState = `e2e_csrf_state_${Date.now()}`;
-
-        // Instead of clicking the confirm button (which would call the real Edge Function
-        // and redirect to Discord), go directly to the result page simulating the callback.
-        // Set sessionStorage state first using evaluate (must be on the same page).
         await page.evaluate((state) => {
             sessionStorage.setItem('discord_oauth_state', state);
         }, mockState);
@@ -31,8 +38,38 @@ test.describe('Buyer Flow', () => {
         await page.goto(`/buyer/discord/result?code=mock_code_abc&state=${mockState}`);
 
         // ── 4. Discord Result Page ─────────────────────────────────────────
-        // The mock OAuth exchange resolves immediately → show success heading
-        await expect(page.getByText('連携完了！🎉')).toBeVisible({ timeout: 10000 });
+        // Wait for either the confirm step or the direct success
+        // Use web-first assertion (toBeVisible) which properly retries
+        const confirmButton = page.getByRole('button', { name: 'このアカウントで連携を完了する' });
+        const successHeading = page.getByText('連携完了！🎉');
+
+        // First, wait for the page to settle (first API call to complete)
+        await page.waitForResponse(
+            resp => resp.url().includes('discord-oauth') && resp.status() === 200,
+            { timeout: 10000 }
+        );
+
+        // Check if confirmation step exists (the most reliable way)
+        let hasConfirmStep = false;
+        try {
+            await expect(confirmButton).toBeVisible({ timeout: 5000 });
+            hasConfirmStep = true;
+        } catch {
+            hasConfirmStep = false;
+        }
+
+        if (hasConfirmStep) {
+            // Click the confirm button and wait for the second API call
+            await Promise.all([
+                page.waitForResponse(
+                    resp => resp.url().includes('discord-oauth') && resp.status() === 200,
+                    { timeout: 15000 }
+                ),
+                confirmButton.click(),
+            ]);
+        }
+
+        await expect(successHeading).toBeVisible({ timeout: 15000 });
 
         // ── 5. Navigate to My Page ────────────────────────────────────────
         const myPageLink = page.getByRole('link', { name: 'マイページへ' });

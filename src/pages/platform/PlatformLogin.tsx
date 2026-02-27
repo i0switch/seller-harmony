@@ -25,10 +25,13 @@ export default function PlatformLogin() {
     try {
       await login(email, password);
       navigate("/platform/dashboard");
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error
+        ? err.message
+        : "メールアドレスまたはパスワードが正しくありません";
       toast({
         title: "ログイン失敗",
-        description: err.message || "メールアドレスまたはパスワードが正しくありません",
+        description: message,
         variant: "destructive",
       });
     } finally {

@@ -11,6 +11,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "playwright test",
+    "e2e:hosted:auth": "node ./tests/e2e/scripts/capture-hosted-storage.mjs",
+    "e2e:hosted": "playwright test -c playwright.hosted.config.ts",
+    "e2e:hosted:3x": "npm run e2e:hosted && npm run e2e:hosted && npm run e2e:hosted",
     "stripe:listen": "pwsh -ExecutionPolicy Bypass -File .\\.agent\\skills\\stripe-cli-dev\\scripts\\listen.ps1",
     "stripe:trigger": "pwsh -ExecutionPolicy Bypass -File .\\.agent\\skills\\stripe-cli-dev\\scripts\\trigger.ps1"
   },

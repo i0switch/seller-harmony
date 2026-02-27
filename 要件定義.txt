@@ -1,0 +1,1619 @@
+1. 要件定義書（Webサービス要件定義）
+サービス名（仮）
+
+ファンクラブ自動運用インフラ（Stripe Connect版）
+
+1-1. 文書情報
+
+文書種別: 要件定義書
+
+対象システム: 販売者向けファンクラブ自動運用Webサービス
+
+作成目的: 開発着手前の要求整理、開発スコープ確定、実装判断基準の明確化
+
+想定読者: 企画者、開発者（フロント/バックエンド）、運用者、インフラ担当、QA担当
+
+1-2. 背景・目的
+背景
+
+販売者（クリエイター/インフルエンサー）が、PCを使わずスマホ中心で以下を完結したい要望がある。
+
+本人確認
+
+銀行口座登録
+
+商品（プラン）作成
+
+決済導線構築
+
+購入者へのDiscord権限付与
+
+解約/不払い時の権限剥奪
+
+目的
+
+運営者の手作業を極小化し、以下を自動化する。
+
+決済処理
+
+売上分配
+
+振込管理（Stripe側機能活用）
+
+Discordロール付与/剥奪
+
+不整合検知・修復（番人バッチ）
+
+1-3. サービス概要
+コンセプト
+
+販売者はスマホで登録するだけ。入金確認、分配・振込、Discord権限管理をAIエージェント/自動処理が実行するプラットフォーム。
+
+コア価値
+
+運営者の手作業ゼロ運用を目指す
+
+販売者のKYC/振込をStripeにアウトソース
+
+購入者体験を1タップ決済中心に最適化
+
+Discord連携で提供価値（限定コミュニティ）を即時付与
+
+1-4. スコープ
+対象範囲（In Scope）
+
+販売者のStripe Connectオンボーディング（Express）
+
+商品/プラン作成（月額・単発）
+
+Stripe Checkout決済導線
+
+Discord OAuth2連携
+
+Discordロール自動付与/剥奪
+
+Stripe Webhook処理
+
+DBによる会員状態管理
+
+日次整合性チェック（番人バッチ）
+
+運営管理画面（最低限）
+
+対象外（Out of Scope）
+
+独自決済代行の実装（Stripe以外）
+
+Discord以外のコミュニティ基盤（Telegram/LINE等）
+
+高度なCRM/MA機能
+
+コンテンツ配信CMS本体（動画ホスティング等）
+
+返金審査自動化（返金UIのみ連携想定）
+
+1-5. 利用者定義（ユーザー種別：SaaS 3層構造）
+
+プラットフォーム管理者（SaaS提供者）
+
+サービス全体の設定・監視・障害対応、テナント統制、全体キュー監視
+
+販売者（SaaS利用者・テナント）
+
+プラン作成、Discordロール紐付け、および「自会員の突合監視・手動例外対応」
+
+購入者（エンド会員）
+
+決済、Discord連携、自ステータスのセルフサービス確認
+
+システム（自動処理）
+
+Webhook処理、ロール同期、監査ログ記録
+
+1-6. 業務フロー（概要）
+販売開始まで（販売者）
+
+販売者が「販売を始める」を押下
+
+Stripe Expressオンボーディングへ遷移
+
+本人確認・銀行口座登録完了
+
+サービスに戻る
+
+プラン作成（月額/単発）
+
+Discordサーバー/ロールIDを紐付け
+
+販売リンク発行
+
+購入〜権限付与（購入者）
+
+購入者が販売リンクにアクセス
+
+Stripe Checkoutで決済（Apple Pay/Google Pay/カード）
+
+決済完了画面で「Discordに参加」
+
+Discord OAuth2認可
+
+Discordサーバー参加＆対象ロール付与
+
+DBへ会員状態反映
+
+解約/不払い時
+
+Stripe Webhookでイベント受信
+
+対象会員状態を無効化
+
+Discordロール剥奪API実行
+
+ログ保存・通知（失敗時リトライ）
+
+1-7. 機能要件（販売者向け）
+FR-S-01 販売者登録/認証
+
+販売者はメール/ソーシャルログインで登録可能
+
+初回ログイン時に利用規約/禁止商材ポリシーへの同意必須
+
+FR-S-02 Stripe Connectオンボーディング
+
+「販売を始める」押下でStripe ExpressオンボーディングURLを生成し遷移
+
+スマホで本人確認・銀行口座登録を完了できること
+
+完了/途中離脱/再開に対応すること
+
+FR-S-03 販売者ステータス表示
+
+Connect口座状態を表示
+
+未開始
+
+審査中
+
+有効
+
+制限あり（要追加情報）
+
+販売開始可否を状態に応じて制御
+
+FR-S-04 プラン（商品）作成
+
+月額サブスクリプション作成
+
+単発販売（one-time）作成
+※単発販売における権限付与期間のポリシー（無期限 or 期限付き[日数指定等]）をプランごとに設定・定義可能とする。
+
+プラン名、説明、価格、通貨、公開/非公開設定
+
+DiscordロールID紐付け
+
+1プランにつき1ロール以上（将来複数ロール拡張可能）
+
+FR-S-05 販売リンク生成
+
+各プランごとに購入URLを生成
+
+URLの有効状態（公開/停止）切替可能
+
+FR-S-06 売上確認導線
+
+Stripe Express Dashboardへの遷移ボタン提供
+
+売上や入金予定はStripe画面参照（本サービス内では最低限表示）
+
+FR-S-07 Discord連携設定（改訂）
+
+DiscordサーバーID登録、Bot導入確認、ロールID設定に加え、Botロール階層チェック支援を実装する。
+
+販売者がプランを作成/更新する際、以下を表示する。
+
+設定ガイド（画像付き）
+「Discord設定 > ロール で、Botの役職を有料ロールより上にドラッグ＆ドロップしてください」
+
+チェックリスト表示
+- Bot導入済み
+- Manage Roles 権限あり
+- Botロール階層が対象ロールより上位
+
+テスト付与ボタン（任意だが推奨）
+指定テストユーザー/販売者本人に対してロール付与の疎通確認
+
+条件未達時は、プラン公開をブロックまたは警告表示する。
+
+1-8. 機能要件（購入者向け）
+FR-B-01 決済ページ
+
+Stripe Checkoutを使用
+
+Apple Pay / Google Pay / クレジットカード対応（利用可能範囲はStripe設定に依存）
+
+モバイル表示最適化
+
+FR-B-02 決済完了後導線
+
+決済完了ページに「Discordに参加」ボタンを表示
+
+Discord未ログイン時はOAuth認証へ遷移
+
+FR-B-03 Discord自動接続
+
+OAuth2認可完了後、該当サーバーへ参加処理
+
+対象ロール付与
+
+成功/失敗メッセージ表示
+
+FR-B-04 購入者向けマイページ・再連携機能（セルフサービス）
+
+購入者が自身のステータス状態や過去の購入プランを確認できるページ。
+
+機能要件（MVP）:
+- 自分の購入プラン一覧と現在の課金状態表示
+- Discord連携状態の確認と誤連携防止UX（OAuth完了後、付与前にDiscord usernameを明示し「このアカウントで連携する/やり直す」を確認させる、または完了画面で明示するステップ）
+- 再連携ボタン（OAuth再接続導線の発行）
+- ロール再付与リクエストボタン（連携済みだがロールがない場合の再同期UI）
+- 領収書/請求情報の参照導線（Stripe Customer Portal等への遷移。※適格請求書の要件適合は事業者設定に依存）
+
+1-9. システム機能要件（自動化コア）
+FR-SYS-01 Stripe Connect分配エンジン（改訂）
+
+購入者が支払った金額から、プラットフォーム手数料を差し引いた上で販売者への分配を行う。
+
+単発決済（one-time）とサブスクリプション（月額）で、Connectの支払い方式を分けて選定できる設計とする。
+
+初期案として以下を比較検討対象とする。
+- Destination Charges
+- Separate Charges and Transfers
+
+サブスクリプションについては、返金・再請求・将来の複数分配（例：アフィリエイト報酬）を見据え、Separate Charges and Transfers を優先候補として再検討する。
+
+最終採用方式は、Stripe公式ドキュメントの最新仕様・対象国・アカウント条件を確認の上で決定する。
+
+※取引ごとに手数料・分配額・対象販売者を記録する（従来通り）
+
+FR-SYS-02 Webhook監視ワーカー（改訂）
+
+Stripe Webhook受信・署名検証
+
+対応イベント例:
+- checkout.session.completed
+- customer.subscription.created
+- customer.subscription.updated
+  ※ `cancel_at_period_end` がtrueになった場合は、即座に解約状態にせず「予約解約（cancel_scheduled）」状態として扱う。
+- customer.subscription.deleted
+- invoice.paid
+- invoice.payment_failed (再試行中は猶予)
+- invoice.finalization_failed / invoice.marked_uncollectible
+- charge.refunded（返金）
+- charge.dispute.created / closed（チャージバック）
+
+イベントごとに会員状態・Discordロール状態を更新する。特に署名検証（`STRIPE_WEBHOOK_SECRET`）に失敗した場合や未指定の場合は、開発環境であっても処理を継続させず即座に破棄・または保存のみで処理キューへの投入を禁止する（Fail Closed原則）。
+
+【追記】invoice.payment_failed 受信時は、即時剥奪を原則とせず、不払い猶予期間のルールに従う。
+初期ルール案:
+- 支払失敗日から 3日間は猶予
+- 4日目以降に最終失敗が確定している場合、Discordロール剥奪
+Stripeの再試行（Smart Retries を含む）設定と連動し、最終失敗確定イベント/状態を優先して剥奪判定を行う。
+
+FR-SYS-03 Discordロール制御
+
+ロール付与API
+
+ロール剥奪API
+※同一ユーザーが同一サーバー（Guild）内で複数のプランを契約している場合の「ロール競合」に注意する。同一ロールを要求する有効な別メンバーシップ（Membership）が存在する場合は、片方の解約を理由とした剥奪処理をスキップするルールを明文化する。
+
+リトライ制御（再試行）
+
+レート制限考慮
+
+失敗時のデッドレター/再処理キュー
+
+FR-SYS-04 「番人」同期スクリプト（日次）
+
+DBの有効会員一覧とDiscordロール保有者を照合
+
+不正/不整合を自動検知
+
+支払無効なのにロール保有
+
+支払有効なのにロール未付与
+
+自動修正＆監査ログ記録
+
+FR-SYS-05 監査ログ
+
+主要処理のログをDB（audit_logs）に保持し、action をアプリ層のENUMバリデーションまたはDBのCHECK制約で列挙値化（例: `ROLE_REVOKE_MANUAL`, `SUBSCRIPTION_EXPIRED`, `SUBSCRIPTION_CANCELED_IMMEDIATE` 等）して横断検索可能にする。
+
+記録時のメタデータ最低限のスキーマ要件:
+- `reason` / `cancel_reason` / `end_reason` (理由や終了事由)
+- `request_id` / `job_id` / `correlation_id` (Webhook起点で一連の処理を紐づける相関ID)
+- `before_state` / `after_state` (状態変更の差分)
+
+決済イベント受信
+
+会員状態変更
+
+Discordロール付与/剥奪
+
+リトライ実行
+
+手動介入履歴（誰が、いつ、何を、なぜ行ったか）
+
+FR-SYS-06 システム通知機能
+
+各種イレギュラーやシステム状態を適切なアクターへ的確に通知する。
+※MVP時は管理画面内アラート中心とし、順次メール等へ拡張。
+
+通知対象と内容:
+- 運営者: Webhook失敗の多発、Discord階層エラー検知、番人同期（日次処理）の失敗
+- 販売者: Stripeアカウントの制限発生、Discord Botの権限不足、ロール階層エラー、システムお知らせ（ダッシュボード通知バナー: title, body, starts_at, ends_atの期間表示）
+- 購入者: Discord未連携の警告、支払失敗（猶予期間中）、猶予終了前の再決済案内
+
+1-10. プラットフォーム管理者（SaaS提供者）機能要件
+FR-A-01 販売者一覧
+
+販売者の状態確認（Stripe/KYC/販売可否）
+
+プラン数、有効会員数、エラー件数
+
+FR-A-02 イベント監視
+
+Webhook処理結果一覧
+
+Discord API失敗一覧
+
+再処理実行（手動）
+
+FR-A-03 ポリシー管理 / システム制御
+
+手数料率設定（全体/販売者別）
+
+利用禁止カテゴリ設定
+
+テキスト審査フラグ（将来AI審査拡張）
+
+処理停止スイッチ（Kill Switch）: 障害時等に特定の自動ジョブ（Webhook処理、Discord剥奪、付与、番人バッチ等）をシステム全体で緊急停止できるフラグ機能
+
+FR-A-04 監査/レポート
+
+売上集計（参考値）
+
+返金・失敗決済件数
+
+不整合修正件数
+
+1-10-b. SaaS利用者（販売者/テナント）向け 運用サポート機能要件
+（※以下はプラットフォーム管理者ではなく、SaaS利用者が自身の顧客をサポートするための機能）
+
+FR-T-01 エンド会員状態ダッシュボード（Discord連携 × 課金状況）
+
+自テナントのDiscord連携状況と課金状況の現在ステータスを一覧でクロスチェックできる管理画面。
+不整合（乖離）が起きているユーザーを特定・救済するための中心ツールとなる。
+
+表示・絞り込み項目:
+- ユーザー/会員情報、対象プラン
+- 課金ステータス（active, payment_failed, grace_period, canceled 等）
+- Discord連携ステータス（連携未済、ロール付与済み、ロール未付与 等）
+- 状態の乖離アラート（例: 「課金有効だがロールなし」「解約済みだがロールあり」等の異常検知フラグ）
+
+管理アクション:
+- 対象ステータスの強制同期ジョブ実行（手動でのロール再付与／手動剥奪等）
+- 対象ユーザーの個別詳細ログ（Webhook受信履歴、Discord API履歴等）の確認
+
+FR-T-02 自エンド会員の統合タイムライン機能
+
+対象会員に発生した全イベントを1つのタイムラインに統合表示し、「今何が起きているか/何が起きたか」を一目で把握可能にする。
+
+表示対象イベント（時系列）:
+- Stripeイベント（決済完了、請求失敗、解約等）
+- Webhook処理結果
+- membership状態変更
+- Discord API結果（付与/剥奪）
+- 管理者の手動操作履歴（誰が、いつ、何をしたか、理由付き）
+
+FR-T-03 手動オーバーライド機能（自動化の例外対応）
+
+対象会員のシステム挙動を一時的にオーバーライド（例外処理）できる機能。
+例：「銀行振込の確認が取れたから今日だけ維持」「トラブル中なので自動剥奪を保留」
+
+機能要件:
+- ロール維持の優先（対象ユーザーへの自動剥奪ジョブを一時停止/次回同期まで保留）
+- 有効期限の設定（例: 24時間 / 3日間 など必須）
+- オーバーライド中は、突合ダッシュボード等で目立つように警告・バッジ表示（意図的な不整合状態として扱う）
+
+FR-A-08 プラットフォーム管理者の全体再試行キュー監視機能
+
+システム全体で発生した再試行（リトライ）待ちジョブを管理する画面（プラットフォーム管理者用）。
+
+表示・操作項目:
+- 再試行待ち全体ジョブ一覧（対象テナント、対象ジョブ、次回再試行時刻、試行回数、エラー）
+- 手動アクション: 「今すぐ再試行」「失敗として即時終了」「再試行を保留」
+
+FR-T-04 返金ポリシー・ルールの設定／表示
+
+返金処理が発生した際の自動挙動について、管理画面上でルールを設定・確認できる機能。
+※初期は設定値固定でも可とし、将来的に編集可能とする。
+
+設定すべき項目:
+- 全額返金時: 即時ロール剥奪するか
+- 一部返金時: ロール維持 / 剥奪 / 手動確認（保留）とするか
+- チャージバック（dispute）発生時の挙動: 即剥奪 / 猶予 / フラグ付与（risk_flag, dispute_status 等での状態管理）
+- 返金イベント受信時の通知先（運営/販売者）
+
+※ 全ての管理画面一覧API（Webhook履歴、ダッシュボード、お知らせ等）は、必ずページング（page / page_size 等）およびソート仕様を実装し、レスポンス形式を統一（例: `{ items, page, page_size, total_count }`）して高負荷を防ぐこと。
+
+1-11. 非機能要件
+NFR-01 可用性
+
+目標稼働率: 99.5%以上（初期）
+
+Webhook受信は一時障害時も再処理可能であること
+
+NFR-02 性能
+
+決済完了後のDiscordロール付与: 通常30秒以内（目標）
+
+管理画面API: 95パーセンタイルで2秒以内（通常条件）
+
+NFR-03 拡張性
+
+販売者数/プラン数増加に対応
+
+Discordサーバー数増加に対応
+
+将来Telegram等への拡張を考慮した抽象化
+
+NFR-04 セキュリティ
+
+Webhook署名検証必須
+
+OAuthトークン暗号化保存
+
+最小権限原則
+
+管理者操作の監査ログ
+
+NFR-05 保守性
+
+処理単位の責務分離（決済/会員/Discord/監査）
+
+ジョブ再実行可能設計
+
+エラー分類の標準化
+
+NFR-06 法令・規約順守
+
+決済・KYCはStripeの規約/審査要件に従う
+
+禁止商材・禁止コンテンツ方針を明文化
+
+Discord API利用規約順守
+
+NFR-07 運用・同期要件（追記）
+
+不払い時の猶予期間・再試行方針は運営設定で変更可能な設計が望ましい（初期値3日）。
+**特に `grace_period_ends_at` は、中途半端にシステム側で独自判断せず、Stripe Dashboardの 「Smart Retries（自動再試行）」設定の最終完了/失効タイミング（`invoice.voided`等）と同期して剥奪判定を行うこと。**
+
+1-12. 制約条件・前提
+
+Stripe Connectを利用可能な法人/事業形態であること（国・業種制約あり）
+
+Discord Botを各対象サーバーに導入できること
+
+販売者がロールIDを取得/指定できること
+
+提供商材がStripe/Discordの規約上許容されること
+
+1-13. リスク・注意点（重要）
+1) 決済事業者審査リスク
+
+アダルト色が強い商材、投資助言、高リスク商材はStripe審査で制限される可能性あり
+
+審査結果は時期/地域/運用実態で変動するため事前確認が必要
+
+2) Discord権限不整合
+
+Bot権限不足、ロール階層不整合で付与/剥奪失敗の可能性
+
+日次番人バッチで補正する前提が必要
+
+3) Webhook順序・重複
+
+Stripeイベントは順不同/重複受信があり得る
+
+冪等性（idempotency）設計が必須
+
+4) チャージバック/返金/プラン価格変更のロジック
+
+プラン（plansテーブル）の価格変更や販売停止時は、新プランを作成して旧プランを論理削除する方針（`deleted_at`, `is_public=false`）を利用する。
+
+返金時の権限剥奪ルール、チャージバック発生時のリスクホールド（猶予措置等、risk_flagでの管理）の定義と自動化が必要。
+
+一部返金時の扱いは要件化（即剥奪 / 維持など）
+
+1-14. セキュリティ・データポリシー（追加）
+
+- **OAuth要件**: Discord連携時は必ず `state` パラメータ検証（CSRF防止）を行う（対応可能ならPKCEも追加）。
+- **データ保持と削除**: トークン、PII（メールアドレス等の個人情報）、WebhookのPayload等は保持期間ポリシーを設け、退会・解約時の匿名化ルール（法的要件配慮）を定義する。
+- **権限隔離（RBAC粒度）**: 販売者が閲覧可能な購入者情報（PII制限等）や、管理者の細かな権限（ジョブ実行、強制手動操作）の境界線を明確に設計する。
+
+1-15. 受け入れ基準（抜粋・異常系含む）
+
+販売者がスマホのみでConnectオンボーディング完了できる
+
+プラン作成後、購入リンクが発行される
+
+決済完了後、Discordロールが自動付与される
+
+解約/不払いイベント受信時、Discordロールが自動剥奪される
+
+Webhook重複受信でも幂等性が働き、二重付与/二重剥奪しない
+
+`invoice.payment_failed` 受信直後は猶予（grace_period）となりロールは維持される
+
+`cancel_at_period_end=true` は即時解約せず `cancel_scheduled` となり、期間満了までロール維持される
+
+チャージバック（`charge.dispute.created`）時にポリシーによるホールド/通知が作動する
+
+同一Roleを要求する別の有効なmembershipがある場合、片方解約時の剥奪はスキップされる
+
+`STRIPE_WEBHOOK_SECRET` 未設定時は本番環境で起動失敗または処理を禁止する
+
+日次同期で不整合が検知・修正される
+
+主要イベントが監査ログに残る
+
+2. 技術仕様書（実装仕様）
+2-1. 文書情報
+
+文書種別: 技術仕様書
+
+対象: ファンクラブ自動運用インフラ（Stripe Connect版）
+
+目的: 開発実装、テスト、運用のための技術設計明確化
+
+2-2. 推奨技術スタック（案）
+フロントエンド
+
+Next.js（Lovable生成ベース想定）
+
+TypeScript
+
+Tailwind CSS（任意）
+
+Stripe hosted pageへの遷移UI
+
+バックエンド
+
+FastAPI (Python)
+
+非同期処理（Celery / RQ / Dramatiq のいずれか）
+
+HTTPクライアント（Discord API、Stripe API）
+
+データベース / BaaS
+
+Supabase (PostgreSQL)
+
+認証（Supabase Authまたは外部認証）
+
+Row Level Security（必要に応じて）
+
+決済
+
+Stripe Connect (Express)
+
+Stripe Checkout
+
+Stripe Webhooks
+
+外部連携
+
+Discord OAuth2
+
+Discord Bot API（Guild Member Role管理）
+
+インフラ（例）
+
+Front: Vercel
+
+API/Worker: Render / Railway / Fly.io / Cloud Run / ECS 等
+
+Queue/Cache: Redis（ジョブキュー用途）
+
+Secret管理: 環境変数 + Secret Manager
+
+真実（設計方針）: 上記は一般的な構成案です。
+不明（要確認）: 「2026年最適」かどうかは、実際の要件・予算・運用体制で変動します。
+
+2-3. システムアーキテクチャ（論理）
+[Browser/Mobile]
+   ├─ Frontend (Next.js)
+   │   ├─ Seller UI
+   │   ├─ Buyer UI
+   │   └─ Admin UI
+   │
+   └─ Redirect to Stripe Checkout / Stripe Express / Discord OAuth
+
+[Backend API (FastAPI)]
+   ├─ Auth / Seller APIs
+   ├─ Product/Plan APIs
+   ├─ Checkout Session Creation
+   ├─ Stripe Webhook Endpoint
+   ├─ Discord OAuth Callback
+   ├─ Role Grant/Revoke Service
+   └─ Admin Monitoring APIs
+
+[Worker / Scheduler]
+   ├─ Webhook async processing
+   ├─ Retry jobs
+   ├─ Daily Guardian Sync
+   └─ Alert notifications
+
+[Supabase/Postgres]
+   ├─ users / sellers / buyers
+   ├─ stripe_accounts / plans
+   ├─ purchases / subscriptions
+   ├─ discord_links / role_assignments
+   ├─ webhook_events / audit_logs
+   └─ reconciliation_results
+
+[External]
+   ├─ Stripe Connect / Checkout / Webhooks
+   └─ Discord OAuth2 / Bot API
+2-4. ドメインモデル（主要エンティティ）
+1) User
+
+サービス利用者の共通主体（販売者/購入者/管理者）
+
+2) SellerProfile
+
+販売者固有情報
+
+Stripe Connectアカウント紐付け
+
+3) StripeConnectedAccount
+
+Connect口座ID、状態、要件不足情報
+
+4) Plan
+
+販売商品（subscription / one-time）
+
+Discordロールとの紐付け
+
+5) CheckoutSessionRecord
+
+Checkoutセッション追跡
+
+成功/失敗状態
+
+6) Membership
+
+購入者の会員状態（有効/停止/解約/支払失敗）
+
+7) DiscordIdentity
+
+購入者のDiscordユーザーID、OAuth連携状態
+
+8) RoleAssignment
+
+どのMembershipに対してどのロールが付与されたかの履歴
+
+9) WebhookEvent
+
+Stripeイベント原本/処理状況/冪等制御
+
+10) AuditLog
+
+業務上の重要操作ログ
+
+2-5. データベース設計（テーブル定義案）
+
+以下は実装用の初期案です（PostgreSQL）。
+
+users
+
+id (uuid, pk)
+
+email (text, unique, not null)
+
+display_name (text)
+
+role (text) — admin | seller | buyer | multi
+
+created_at (timestamptz)
+
+updated_at (timestamptz)
+
+seller_profiles
+
+id (uuid, pk)
+
+user_id (uuid, fk -> users.id)
+
+store_name (text)
+
+status (text) — draft | active | suspended
+
+platform_fee_rate_bps (int) — 例: 1000 = 10%
+
+created_at
+
+updated_at
+
+stripe_connected_accounts
+
+id (uuid, pk)
+
+seller_id (uuid, fk)
+
+stripe_account_id (text, unique)
+
+account_type (text) — express
+
+charges_enabled (bool)
+
+payouts_enabled (bool)
+
+details_submitted (bool)
+
+requirements_due (jsonb)
+
+last_synced_at (timestamptz)
+
+created_at
+
+updated_at
+
+discord_servers
+
+id (uuid, pk)
+
+seller_id (uuid, fk)
+
+guild_id (text, not null)
+
+guild_name (text)
+
+bot_installed (bool)
+
+bot_permission_status (text) — ok | insufficient | unknown
+
+created_at
+
+updated_at
+
+plans
+
+id (uuid, pk)
+
+seller_id (uuid, fk)
+
+name (text)
+
+description (text)
+
+plan_type (text) — subscription | one_time
+
+currency (text) — jpy 等
+
+amount (int) — 最小通貨単位
+
+is_public (bool)
+
+is_active (bool)
+
+discord_guild_id (text)
+
+discord_role_id (text)
+
+stripe_product_id (text)
+
+stripe_price_id (text)
+
+deleted_at (timestamptz, nullable)
+
+metadata (jsonb)
+
+created_at
+
+updated_at
+
+buyers
+
+id (uuid, pk)
+
+user_id (uuid, fk -> users.id, nullable) ※ゲスト後連携も想定
+
+email (text)
+
+stripe_customer_id (text, unique, nullable)
+
+created_at
+
+updated_at
+
+discord_identities
+
+id (uuid, pk)
+
+buyer_id (uuid, fk)
+
+discord_user_id (text, unique)
+
+discord_username (text)
+
+access_token_encrypted (text) ※必要最小限
+
+refresh_token_encrypted (text)
+
+token_expires_at (timestamptz)
+
+scope (text)
+
+linked_at (timestamptz)
+
+updated_at (timestamptz)
+
+checkout_sessions
+
+id (uuid, pk)
+
+plan_id (uuid, fk)
+
+buyer_id (uuid, fk, nullable)
+
+stripe_checkout_session_id (text, unique)
+
+stripe_payment_intent_id (text, nullable)
+
+stripe_subscription_id (text, nullable)
+
+status (text) — created | completed | expired | failed
+
+success_url (text)
+
+cancel_url (text)
+
+created_at
+
+updated_at
+
+memberships
+
+id (uuid, pk)
+
+plan_id (uuid, fk)
+
+seller_id (uuid, fk)
+
+buyer_id (uuid, fk)
+
+stripe_customer_id (text)
+
+stripe_subscription_id (text, nullable)
+
+membership_type (text) — subscription | one_time
+
+status (text) — pending_discord | active | grace_period | cancel_scheduled | payment_failed | canceled | expired | refunded
+
+risk_flag (bool, default false)
+
+dispute_status (text, nullable)
+
+entitlement_ends_at (timestamptz, nullable) ※特にone_time等の期限管理用
+
+current_period_start (timestamptz, nullable)
+
+current_period_end (timestamptz, nullable)
+
+last_paid_at (timestamptz, nullable)
+
+canceled_at (timestamptz, nullable)
+
+ended_at (timestamptz, nullable)
+
+grace_period_started_at (timestamptz, nullable)
+
+grace_period_ends_at (timestamptz, nullable)
+
+final_payment_failure_at (timestamptz, nullable)
+
+revoke_scheduled_at (timestamptz, nullable)
+
+created_at
+
+updated_at
+
+【状態遷移（状態機械）規約】
+pending_discord → active
+active → grace_period
+active → cancel_scheduled
+cancel_scheduled → expired (有効期間終了時)
+grace_period → active
+grace_period → payment_failed
+active → canceled (即時解約)
+canceled → expired
+
+【DBインデックス要件】
+UNIQUE (stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL
+INDEX memberships_seller_status_idx (seller_id, status)
+INDEX memberships_buyer_status_idx (buyer_id, status)
+INDEX memberships_grace_ends_idx (grace_period_ends_at)
+
+role_assignments
+
+id (uuid, pk)
+
+membership_id (uuid, fk)
+
+discord_user_id (text)
+
+guild_id (text)
+
+role_id (text)
+
+desired_state (text) — granted | revoked
+
+actual_state (text) — granted | revoked | failed | pending
+
+last_attempt_at (timestamptz)
+
+attempt_count (int)
+
+last_error_code (text)
+
+last_error_message (text)
+
+created_at
+
+updated_at
+
+【DBインデックス要件】
+INDEX role_assignments_lookup_idx (discord_user_id, guild_id, actual_state)
+
+stripe_webhook_events
+
+id (uuid, pk)
+
+stripe_event_id (text, unique)
+
+event_type (text)
+
+livemode (bool)
+
+payload (jsonb)
+
+signature_verified (bool)
+
+received_at (timestamptz)
+
+processed_at (timestamptz, nullable)
+
+process_status (text) — pending | processing | succeeded | failed | ignored
+
+idempotency_key (text)
+
+error_message (text, nullable)
+
+system_announcements
+
+id (uuid, pk)
+
+title (text)
+
+body (text)
+
+severity (text)
+
+target_scope (text)
+
+starts_at (timestamptz)
+
+ends_at (timestamptz)
+
+is_published (bool)
+
+audit_logs
+
+id (uuid, pk)
+
+actor_type (text) — system | admin | seller | buyer
+
+actor_id (text, nullable)
+
+action (text)
+
+target_type (text)
+
+target_id (text)
+
+result (text) — success | failure
+
+metadata (jsonb)
+
+created_at (timestamptz)
+
+reconciliation_runs
+
+id (uuid, pk)
+
+run_date (date)
+
+status (text) — running | completed | failed
+
+checked_count (int)
+
+fixed_count (int)
+
+anomaly_count (int)
+
+summary (jsonb)
+
+started_at
+
+ended_at
+
+2-6. API仕様（主要）
+
+※ REST前提。実装時にOpenAPIで定義。
+
+認証/販売者
+POST /api/sellers/onboarding-link
+
+概要: Stripe ExpressオンボーディングURL生成
+
+認証: 必須（販売者）
+
+Req:
+
+{
+  "return_url": "https://example.com/seller/onboarding/return",
+  "refresh_url": "https://example.com/seller/onboarding/refresh"
+}
+
+Res:
+
+{
+  "url": "https://connect.stripe.com/..."
+}
+GET /api/sellers/me/status
+
+概要: 販売者状態・Stripe口座状態取得
+
+プラン管理
+POST /api/plans
+
+概要: プラン作成（月額/単発）
+
+Req:
+
+{
+  "name": "VIP会員",
+  "description": "限定配信に参加できます",
+  "plan_type": "subscription",
+  "currency": "jpy",
+  "amount": 2980,
+  "discord_guild_id": "1234567890",
+  "discord_role_id": "9876543210",
+  "is_public": true
+}
+GET /api/plans/{plan_id}
+
+概要: プラン詳細取得
+
+PATCH /api/plans/{plan_id}
+
+概要: プラン更新（公開/停止含む）
+
+POST /api/plans/{plan_id}/checkout-session
+
+概要: Stripe Checkout Session作成
+
+Req:
+
+{
+  "success_url": "https://example.com/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+  "cancel_url": "https://example.com/checkout/cancel"
+}
+
+Res:
+
+{
+  "checkout_url": "https://checkout.stripe.com/c/pay/..."
+}
+購入者/Discord連携
+GET /api/discord/oauth/start
+
+概要: Discord OAuth開始URL生成
+
+パラメータ: membership_id または checkout_session_id
+
+GET /api/discord/oauth/callback
+
+概要: Discord OAuthコールバック処理
+
+処理:
+
+code交換
+
+Discordユーザー情報取得
+
+guild参加/ロール付与
+
+membership状態更新（pending_discord→active）
+
+POST /api/discord/relink
+
+概要: 再連携実行（権限付与再試行）
+
+Webhook
+POST /webhooks/stripe
+
+概要: Stripeイベント受信
+
+要件:
+
+署名検証
+
+イベント保存
+
+冪等処理
+
+非同期ジョブ投入
+
+応答:
+
+2xxを迅速返却（重い処理はワーカーへ）
+
+プラットフォーム管理者
+GET /api/admin/tenants
+概要: 販売者一覧・状態監視
+
+GET /api/admin/system-queues
+概要: 全体の再試行キューやWebhook処理履歴一覧
+
+POST /api/admin/system-queues/{job_id}/action
+概要: キュージョブに対する全体手動アクション（再試行・終了・保留）
+
+POST /api/admin/announcements
+概要: システムお知らせ配信管理
+
+GET /api/admin/reconciliation-runs
+概要: 番人同期実行履歴
+
+SaaS利用者（販売者/テナント）向け管理API
+GET /api/sellers/memberships/crosscheck
+
+概要: 自テナント会員のDiscord連携と課金状態の突合データ一覧取得
+
+GET /api/sellers/memberships/{membership_id}/timeline
+
+概要: 自テナントの指定会員の統合タイムライン（ログ・イベント）取得
+
+POST /api/sellers/memberships/{membership_id}/override
+
+概要: 自テナント会員の手動オーバーライド実行（有効期限、理由の指定）
+
+POST /api/sellers/memberships/{membership_id}/retry
+
+概要: 自テナント会員の個別リトライ実行
+
+2-7. Stripe連携仕様（重要）
+1) Connectオンボーディング
+
+アカウント種別: Express（想定）
+
+販売者ごとに stripe_account_id を保持
+
+charges_enabled / payouts_enabled を同期
+
+2) 商品/価格管理
+
+plans 作成時にStripe Product / Priceを生成
+
+自サービスの plan_id とStripe product_id / price_id を保持
+
+3) Checkout Session作成
+
+モード:
+
+subscription（月額）
+
+payment（単発）
+
+metadataに内部IDを埋め込む（重要）
+
+plan_id
+
+seller_id
+
+platform_order_ref など
+
+4) 分配（改訂）
+
+Connect課金方式は以下の2案を比較し、ユースケース別に採用する。
+
+- Destination Charges
+即時に販売者へ送金しやすい。構成が比較的シンプル。
+
+- Separate Charges and Transfers
+プラットフォームで受領後、送金タイミングと分配先を柔軟に制御しやすい。返金・調整・複数分配に対応しやすい。
+
+設計方針（初期推奨）
+単発販売: Destination Charges または Separate Charges and Transfers（要件次第）
+サブスクリプション: Separate Charges and Transfers を優先候補として評価
+
+実装前に検証すべき項目
+- Stripe Checkout + Billing + Connect の組み合わせ可否
+- application fee / transfer の計上方法
+- 返金時の送金戻し（reversal）運用
+- 売上計上/会計処理への影響
+- 対象国・業種制約
+
+2-8. Webhookイベント処理仕様（状態遷移）
+共通ルール
+
+署名検証失敗 → 400返却・保存（任意）
+
+stripe_event_id で冪等制御
+
+重複イベントは ignored として記録
+
+DB更新はトランザクション化
+
+イベント別処理（例）
+checkout.session.completed
+
+Checkout sessionをcompleted
+
+buyer / membership仮レコード作成（必要なら）
+
+Discord未連携なら membership.status = pending_discord
+
+invoice.paid（改訂）
+
+grace_period 中であっても active に復帰
+
+猶予関連カラムをクリア
+
+ロールが剥奪済みなら再付与ジョブ投入
+
+対象subscriptionの membership を active にし、last_paid_at と期間を更新
+
+invoice.payment_failed（改訂）
+
+即 payment_failed にせず、原則 grace_period へ遷移
+
+grace_period_started_at, grace_period_ends_at を設定
+
+Discordロールは維持
+
+再請求成功時は active に復帰
+
+最終失敗確定時（Stripe設定/イベントに基づく）に payment_failed へ遷移し、剥奪ジョブ投入
+
+customer.subscription.deleted
+
+membership を canceled / ended
+
+Discordロール剥奪ジョブ投入
+
+charge.refunded（採用時）
+
+返金ポリシーに従い refunded
+
+ロール剥奪ジョブ投入（全額返金時）
+
+2-9. Discord連携仕様
+OAuth2スコープ（例）
+
+identify
+
+guilds.join（必要時）
+
+※ 実際の必要スコープは実装方式により調整
+
+Bot権限（最低限）
+
+Manage Roles
+
+必要に応じて View Channels 等
+
+実装注意
+
+Botロールの階層が対象ロールより上位である必要あり
+
+guild_id, role_id の存在確認
+
+Discord APIのレート制限に備えたバックオフ
+
+失敗時は role_assignments に記録して再試行
+
+Discord連携仕様（追加）
+
+プラン保存時に、可能な範囲で以下の事前検証を行う。
+- guild_id 存在確認
+- role_id 存在確認
+- Botの Manage Roles 権限確認
+- Bot最高位ロール > 対象ロール の階層確認
+
+検証失敗時は、エラーコードをUI表示可能な形で返す。
+- DISCORD_ROLE_HIERARCHY_INVALID
+- DISCORD_MANAGE_ROLES_MISSING
+- DISCORD_ROLE_NOT_FOUND
+- DISCORD_GUILD_ACCESS_DENIED
+
+追加API（推奨）
+POST /api/discord/validate-role-config
+用途: プラン公開前の事前検証
+Req:
+{
+  "guild_id": "1234567890",
+  "role_id": "9876543210"
+}
+Res（例）:
+{
+  "ok": false,
+  "checks": {
+    "bot_installed": true,
+    "manage_roles_permission": true,
+    "role_exists": true,
+    "bot_hierarchy_above_target_role": false
+  },
+  "error_code": "DISCORD_ROLE_HIERARCHY_INVALID",
+  "message": "Botの役職を対象ロールより上に移動してください。"
+}
+
+2-10. 非同期ジョブ / スケジューラ仕様
+キュー種別
+
+webhook_process
+
+discord_role_apply
+
+discord_role_revoke
+
+reconciliation_daily
+
+admin_retry_tasks
+
+リトライポリシー（例）
+
+1回目: 即時
+
+2回目: 30秒後
+
+3回目: 5分後
+
+4回目: 30分後
+
+5回目: 6時間後（以降手動確認）
+
+デッドレター条件
+
+永続的な権限不足
+
+ギルド未参加
+
+ロール不存在
+
+トークン無効（再認証必要）
+
+2-11. 番人同期（Reconciliation）仕様
+実行頻度
+
+1日1回（深夜）
+
+加えて手動実行可能（管理画面）
+
+照合対象
+
+memberships.status = active
+
+role_assignments
+
+Discord実ロール保有状況
+
+判定パターン（追記）
+
+A: active なのにロールなし → 付与
+
+B: inactive/canceled なのにロールあり → 剥奪
+
+C: planのrole_id変更で旧ロール残存 → 剥奪＆新ロール付与（仕様採用時）
+
+D: Discord未連携 → 要再連携通知
+
+E: grace_period 中なのにロールあり → 正常（維持）
+
+F: grace_period 中なのにロールなし → 運用方針に従い再付与（推奨）
+
+G: payment_failed かつ grace_period_ends_at 超過 → 剥奪対象
+
+出力
+
+reconciliation_runs に集計記録
+
+audit_logs に個別修正記録
+
+2-12. セキュリティ仕様
+認証・認可
+
+販売者/管理者APIはJWT認証
+
+管理者APIはロールベース制御（RBAC）
+
+シークレット管理
+
+Stripe Secret Key / Webhook Secret
+
+Discord Client Secret / Bot Token
+
+DB接続情報
+
+Secret Managerで管理（平文コミット禁止）
+
+暗号化
+
+Discord OAuthトークンは保存時暗号化
+
+鍵ローテーション手順を定義
+
+署名検証
+
+Stripe Webhook署名は必須
+
+Discord interaction署名（将来採用時）も必須
+
+監査
+
+管理者操作・手動再処理はすべて監査ログ
+
+2-13. エラーハンドリング方針
+エラー分類
+
+VALIDATION_ERROR
+
+AUTH_ERROR
+
+PERMISSION_ERROR
+
+EXTERNAL_API_ERROR_STRIPE
+
+EXTERNAL_API_ERROR_DISCORD
+
+IDEMPOTENCY_CONFLICT
+
+STATE_CONFLICT
+
+RETRYABLE_ERROR
+
+FATAL_ERROR
+
+原則
+
+ユーザー表示メッセージと内部ログ詳細を分離
+
+個人情報/秘密情報をログに出さない
+
+外部API失敗は再試行可能性を判定
+
+2-14. ログ・監視・通知
+収集ログ
+
+APIアクセスログ
+
+Webhook受信ログ
+
+ジョブ実行ログ
+
+Discord APIエラーログ
+
+DB整合性修復ログ
+
+メトリクス（例）
+
+Webhook処理成功率
+
+ロール付与成功率
+
+ロール剥奪成功率
+
+再試行率
+
+番人修正件数
+
+決済→ロール付与までの時間
+
+通知（例）
+
+Webhook失敗連続発生
+
+Discord API権限不足
+
+番人バッチ失敗
+
+手数料計算不整合検知
+
+2-15. テスト仕様（最低限）
+単体テスト
+
+手数料計算
+
+状態遷移ロジック
+
+冪等性判定
+
+Discordロール処理サービス
+
+結合テスト
+
+Stripe Webhookモック→DB更新→Discordジョブ投入
+
+Discord OAuth→ロール付与成功
+
+解約→剥奪フロー
+
+E2Eテスト
+
+販売者オンボーディング導線（モック可）
+
+購入→Discord付与
+
+不払い/解約→剥奪
+
+障害試験
+
+Discord API一時失敗
+
+Webhook重複受信
+
+ジョブワーカー停止→復旧
+
+2-16. 実装上の注意点（コンプライアンス/審査）
+Stripe利用に関する注意（重要）
+
+Stripeは業種・コンテンツ種別・販売形態により審査/制限が発生し得る
+
+とくに成人向け・高リスク商材・規制領域は事前確認が必要
+
+本仕様書は技術設計案であり、Stripe審査通過を保証するものではない
+
+推奨運用
+
+禁止カテゴリポリシーを販売者登録前に明示
+
+商品説明テキストの自動フラグ（将来）
+
+返金・チャージバック対応手順を運用手順書に別途定義
+
+2-17. 将来拡張案（参考）
+
+Telegram連携（ロール相当権限）
+
+Slackコミュニティ連携
+
+クーポン/紹介コード
+
+継続率分析ダッシュボード
+
+AIによる禁止商材審査補助
+
+マルチ通貨/税対応強化
+
+分配方式の複数対応（固定額/段階課金/アフィリエイト分配）
+
+3. AI開発用プロンプト・実装方針（Antigravity / AIエージェント向け）
+
+以下を「実装方針メモ」として扱い、コード提案の安定性を高めること。
+
+- Stripe Connect支払い方式は固定せず、単発/サブスク別に再評価すること。特にサブスクは Separate Charges and Transfers を優先候補として検証し、返金・再分配・複数分配（アフィリエイト）に耐える設計を提案すること。
+- Stripe Billing の再試行（Smart Retries 含む）を考慮し、invoice.payment_failed 直後に即剥奪しないこと。grace_period ステータスを導入し、最終失敗確定後に剥奪すること。
+- Discordロール付与処理では、Botロール階層制約を必ず事前検証し、UI上で画像付きガイドと検証エラーを返すこと。
+- 推奨運用：初期仕様は「キック（サーバー追放）しない」「ロール剥奪のみ」とする。理由：再決済復帰時のUXが良い、誤剥奪の復旧が容易なため。

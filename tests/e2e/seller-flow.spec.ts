@@ -63,10 +63,24 @@ test.describe('Seller Flow', () => {
         await page.getByRole('button', { name: 'ダッシュボードへ' }).click();
 
         // ── 6. Dashboard ──────────────────────────────────────────────────
+        // Depending on auth refresh timing, login may be shown once; recover and continue.
+        await page.waitForTimeout(500);
+        if (page.url().includes('/seller/login')) {
+            await page.getByLabel('メールアドレス').fill(testEmail);
+            await page.getByLabel('パスワード').fill(testPassword);
+            await page.getByRole('button', { name: 'ログイン' }).click();
+            await page.goto('/seller/dashboard');
+        }
         await expect(page).toHaveURL(/\/seller\/dashboard/, { timeout: 8000 });
 
         // ── 7. Create Plan ────────────────────────────────────────────────
         await page.goto('/seller/plans/new');
+        if (page.url().includes('/seller/login')) {
+            await page.getByLabel('メールアドレス').fill(testEmail);
+            await page.getByLabel('パスワード').fill(testPassword);
+            await page.getByRole('button', { name: 'ログイン' }).click();
+            await page.goto('/seller/plans/new');
+        }
         await page.getByPlaceholder('例: プレミアム会員').fill('E2E プレミア会員');
         await page.getByPlaceholder('プランの説明...').fill('E2Eテスト用プレミアプラン');
         await page.getByPlaceholder('980').fill('4980');

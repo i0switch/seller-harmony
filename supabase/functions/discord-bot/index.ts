@@ -53,6 +53,21 @@ Deno.serve(async (req: Request) => {
         throw new Error('guild_id and role_id are required');
       }
 
+      // OWNERSHIP CHECK: Verify if this guild belongs to the seller
+      const { data: serverData, error: serverError } = await supabaseClient
+        .from('discord_servers')
+        .select('id')
+        .eq('guild_id', guild_id)
+        .eq('seller_id', user.id)
+        .single();
+
+      if (serverError || !serverData) {
+        return new Response(JSON.stringify({ error: 'Forbidden: You do not own this server' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Get all roles in the guild
       const rolesRes = await fetch(
         `https://discord.com/api/v10/guilds/${guild_id}/roles`,

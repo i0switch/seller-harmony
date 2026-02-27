@@ -21,6 +21,8 @@ export default function DiscordResult() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [authResult, setAuthResult] = useState<DiscordAuthResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [confirmingSave, setConfirmingSave] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false);
 
   useEffect(() => {
     if (errorParam) {
@@ -42,13 +44,11 @@ export default function DiscordResult() {
       return;
     }
 
-    // Optional: clear state after successful validation
-    sessionStorage.removeItem("discord_oauth_state");
-
-    const exchangeCode = async () => {
+    const fetchUserInfo = async () => {
       try {
+        // Step 1: Fetch user info without saving (save: false)
         const { data, error } = await supabase.functions.invoke('discord-oauth', {
-          body: { code, redirect_uri: `${window.location.origin}/buyer/discord/result` }
+          body: { code, state, redirect_uri: `${window.location.origin}/buyer/discord/result`, save: false }
         });
 
         if (error || !data) throw new Error(error?.message || "Function error");
@@ -56,20 +56,41 @@ export default function DiscordResult() {
 
         setAuthResult({
           discordUsername: data.discord_user?.username || "Discord User",
-          guildName: "対象サーバー", // Usually we fetch from plan context
+          guildName: "対象サーバー",
           roleName: "該当ロール",
           planName: "プラン",
         });
-        setStatus("success");
+        setStatus("success"); // We'll use a local state to distinguish between "Confirming" and "Finalized"
       } catch (err: unknown) {
         console.error("OAuth exchange failed:", err);
-        setErrorMessage("Discordへの連携に失敗しました。もう一度お試しください。");
+        setErrorMessage("Discord情報の取得に失敗しました。");
         setStatus("error");
       }
     };
 
-    exchangeCode();
-  }, [code, errorParam]);
+    fetchUserInfo();
+  }, [code, errorParam, state]);
+
+  const handleFinalize = async () => {
+    setConfirmingSave(true);
+    try {
+      // Step 2: Finalize save
+      const { data, error } = await supabase.functions.invoke('discord-oauth', {
+        body: { code, state, redirect_uri: `${window.location.origin}/buyer/discord/result`, save: true }
+      });
+
+      if (error || !data?.success) throw new Error(error?.message || "Finalize failed");
+
+      sessionStorage.removeItem("discord_oauth_state");
+      setIsFinalized(true);
+      setConfirmingSave(false);
+    } catch (err) {
+      console.error(err);
+      setErrorMessage("連携の最終処理に失敗しました。");
+      setStatus("error");
+      setConfirmingSave(false);
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -83,14 +104,22 @@ export default function DiscordResult() {
   if (status === "success" && authResult) {
     return (
       <div className="space-y-5">
-        {/* Success */}
+        {/* Success / Confirm */}
         <div className="glass-card rounded-xl p-6 text-center space-y-3">
           <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto">
-            <CheckCircle className="h-10 w-10 text-success" />
+            {isFinalized ? (
+              <CheckCircle className="h-10 w-10 text-success" />
+            ) : (
+              <MessageCircle className="h-10 w-10 text-accent" />
+            )}
           </div>
-          <h1 className="text-xl font-bold">連携完了！🎉</h1>
+          <h1 className="text-xl font-bold">
+            {isFinalized ? "連携完了！🎉" : "アカウントを確認してください"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Discordサーバーに参加し、ロールが付与されました。
+            {isFinalized
+              ? "Discordサーバーに参加し、ロールが付与されました。"
+              : "連携するDiscordアカウントが以下で間違いないか確認してください。"}
           </p>
         </div>
 
@@ -101,39 +130,59 @@ export default function DiscordResult() {
               <span className="text-muted-foreground">Discordアカウント</span>
               <span className="font-medium">{authResult.discordUsername}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">参加サーバー</span>
-              <span className="font-medium">{authResult.guildName}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">付与ロール</span>
-              <Badge variant="default">{authResult.roleName}</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">プラン</span>
-              <span className="font-medium">{authResult.planName}</span>
-            </div>
+            {isFinalized && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">参加サーバー</span>
+                  <span className="font-medium">{authResult.guildName}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">付与ロール</span>
+                  <Badge variant="default">{authResult.roleName}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">プラン</span>
+                  <span className="font-medium">{authResult.planName}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Next Steps */}
-        <div className="glass-card rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-semibold">次のステップ</h2>
-          <div className="space-y-2 text-sm text-muted-foreground">
-            <div className="flex items-start gap-2">
-              <MessageCircle className="h-4 w-4 mt-0.5 text-accent shrink-0" />
-              <p>Discordアプリで「{authResult.guildName}」サーバーを確認してください</p>
+        {isFinalized ? (
+          <>
+            <div className="glass-card rounded-xl p-5 space-y-3">
+              <h2 className="text-sm font-semibold">次のステップ</h2>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <MessageCircle className="h-4 w-4 mt-0.5 text-accent shrink-0" />
+                  <p>Discordアプリで「{authResult.guildName}」サーバーを確認してください</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <ExternalLink className="h-4 w-4 mt-0.5 text-accent shrink-0" />
+                  <p>限定チャンネルにアクセスできるようになっています</p>
+                </div>
+              </div>
             </div>
-            <div className="flex items-start gap-2">
-              <ExternalLink className="h-4 w-4 mt-0.5 text-accent shrink-0" />
-              <p>限定チャンネルにアクセスできるようになっています</p>
-            </div>
+            <Button asChild className="w-full h-12 text-base font-bold">
+              <Link to="/member/me">マイページへ</Link>
+            </Button>
+          </>
+        ) : (
+          <div className="space-y-3">
+            <Button
+              onClick={handleFinalize}
+              disabled={confirmingSave}
+              className="w-full h-12 text-base font-bold"
+            >
+              {confirmingSave ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : null}
+              このアカウントで連携を完了する
+            </Button>
+            <Button variant="outline" asChild className="w-full">
+              <Link to="/buyer/discord/confirm">別のアカウントを試す</Link>
+            </Button>
           </div>
-        </div>
-
-        <Button asChild className="w-full h-12 text-base font-bold">
-          <Link to="/member/me">マイページへ</Link>
-        </Button>
+        )}
       </div>
     );
   }
