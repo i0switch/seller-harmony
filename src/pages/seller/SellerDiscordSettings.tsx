@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { formatDateTimeJP } from "@/types";
 import { sellerApi } from "@/services/api";
-import type { SellerDiscordSettings, DiscordVerificationEntry } from "@/services/api.types";
+import type { SellerDiscordSettings as SellerDiscordSettingsType, DiscordVerificationEntry } from "@/services/api.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { MessageCircle, CheckCircle, XCircle, Loader2, AlertTriangle, RefreshCw, ExternalLink, History, ChevronDown, ChevronUp } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 type VerifyStatus = "idle" | "checking" | "ok" | "error";
 
@@ -19,7 +20,7 @@ const errorGuides: Record<string, { message: string; fix: string }> = {
 };
 
 export default function SellerDiscordSettings() {
-  const [settings, setSettings] = useState<SellerDiscordSettings | null>(null);
+  const [settings, setSettings] = useState<SellerDiscordSettingsType | null>(null);
   const [loading, setLoading] = useState(true);
   const [guildId, setGuildId] = useState("");
   const [defaultRoleId, setDefaultRoleId] = useState("");
@@ -38,22 +39,51 @@ export default function SellerDiscordSettings() {
     });
   }, []);
 
-  const runVerify = () => {
+  const runVerify = async () => {
     setVerifyStatus("checking");
-    setTimeout(() => {
-      if (guildId.length >= 10 && defaultRoleId.length > 0) {
-        setVerifyResult({ botInstalled: true, manageRolesPermission: true, roleExists: true, botRoleHierarchy: true });
+    try {
+      const { data, error } = await supabase.functions.invoke("discord-bot", {
+        body: {
+          action: "validate_bot_permission",
+          guild_id: guildId,
+          role_id: defaultRoleId,
+        },
+      });
+      if (error) throw error;
+
+      if (data?.status === "ok") {
+        setVerifyResult({
+          botInstalled: true,
+          manageRolesPermission: true,
+          roleExists: true,
+          botRoleHierarchy: true,
+        });
         setVerifyErrorCode(null);
         setVerifyStatus("ok");
         toast({ title: "検証完了", description: "すべてのチェック項目が正常です" });
       } else {
-        const errCode = guildId.length < 10 ? "DISCORD_GUILD_ACCESS_DENIED" : "DISCORD_ROLE_NOT_FOUND";
-        setVerifyResult({ botInstalled: guildId.length >= 10, manageRolesPermission: false, roleExists: false, botRoleHierarchy: false });
-        setVerifyErrorCode(errCode);
+        setVerifyResult({
+          botInstalled: data?.checks?.botInstalled ?? false,
+          manageRolesPermission: data?.checks?.manageRolesPermission ?? false,
+          roleExists: data?.checks?.roleExists ?? false,
+          botRoleHierarchy: data?.checks?.botRoleHierarchy ?? false,
+        });
+        setVerifyErrorCode(data?.error_code || "DISCORD_GUILD_ACCESS_DENIED");
         setVerifyStatus("error");
-        toast({ title: "検証失敗", description: "問題が見つかりました", variant: "destructive" });
+        toast({ title: "検証失敗", description: data?.message || "問題が見つかりました", variant: "destructive" });
       }
-    }, 1500);
+    } catch (err) {
+      console.error("Discord verification failed:", err);
+      setVerifyResult({
+        botInstalled: false,
+        manageRolesPermission: false,
+        roleExists: false,
+        botRoleHierarchy: false,
+      });
+      setVerifyErrorCode("DISCORD_GUILD_ACCESS_DENIED");
+      setVerifyStatus("error");
+      toast({ title: "検証エラー", description: "Edge Functionの呼び出しに失敗しました", variant: "destructive" });
+    }
   };
 
   if (loading || !settings) {

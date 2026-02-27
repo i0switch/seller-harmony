@@ -1,24 +1,109 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { CheckCircle, MessageCircle, AlertTriangle, Clock, CreditCard } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { CheckCircle, MessageCircle, AlertTriangle, Clock, CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrency, formatDateJP } from "@/types";
+import { supabase } from "@/integrations/supabase/client";
 
-const mockCheckout = {
-  planName: "プレミアム会員",
-  sellerName: "星野アイ",
-  planType: "subscription" as const,
-  price: 2980,
-  currency: "JPY",
-  nextBillingDate: "2025-03-25",
-  guildName: "星野ファンクラブ",
-};
+interface CheckoutData {
+  planName: string;
+  sellerName: string;
+  planType: "subscription" | "one_time";
+  price: number;
+  currency: string;
+  nextBillingDate?: string;
+  guildName?: string;
+}
 
 export default function CheckoutSuccess() {
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get("session_id");
   const [showLater, setShowLater] = useState(false);
-  const plan = mockCheckout;
+  const [plan, setPlan] = useState<CheckoutData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchCheckoutData() {
+      if (!sessionId) {
+        setError("セッション情報が見つかりません");
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data: membership, error: membershipError } = await supabase
+          .from("memberships")
+          .select(`
+            *,
+            plans:plan_id (name, price, currency, interval, discord_server_id),
+            seller:seller_id (
+              display_name,
+              seller_profiles!inner (store_name)
+            )
+          `)
+          .eq("stripe_checkout_session_id", sessionId)
+          .maybeSingle();
+
+        if (membershipError) throw membershipError;
+
+        if (membership) {
+          const planData = membership.plans as any;
+          const seller = membership.seller as any;
+
+          let guildName = "";
+          if (planData?.discord_server_id) {
+            const { data: server } = await supabase
+              .from("discord_servers")
+              .select("guild_name")
+              .eq("id", planData.discord_server_id)
+              .maybeSingle();
+            guildName = server?.guild_name || "";
+          }
+
+          setPlan({
+            planName: planData?.name || "プラン",
+            sellerName: seller?.seller_profiles?.[0]?.store_name || seller?.display_name || "販売者",
+            planType: planData?.interval === "one_time" ? "one_time" : "subscription",
+            price: planData?.price || 0,
+            currency: planData?.currency || "JPY",
+            nextBillingDate: planData?.interval !== "one_time"
+              ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+              : undefined,
+            guildName,
+          });
+        } else {
+          setError("購入情報の取得に失敗しました。しばらく待ってからページをリロードしてください。");
+        }
+      } catch (err) {
+        console.error("Checkout data fetch error:", err);
+        setError("購入情報の読み込みに失敗しました");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCheckoutData();
+  }, [sessionId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !plan) {
+    return (
+      <div className="space-y-5">
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error || "購入情報が見つかりません"}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -67,7 +152,7 @@ export default function CheckoutSuccess() {
           <MessageCircle className="h-10 w-10 mx-auto text-accent" />
           <h2 className="font-bold">Discordに参加して連携しよう</h2>
           <p className="text-sm text-muted-foreground">
-            「{plan.guildName}」サーバーに参加し、限定コンテンツにアクセスしましょう。
+            {plan.guildName ? `「${plan.guildName}」サーバーに参加し、` : ""}限定コンテンツにアクセスしましょう。
           </p>
         </div>
 

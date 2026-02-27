@@ -1,18 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, AlertTriangle, RotateCcw, User } from "lucide-react";
+import { MessageCircle, AlertTriangle, RotateCcw, User, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const mockDiscordUser = {
-  username: "user_taro#1234",
-  avatar: "🎮",
-  id: "123456789012345678",
-};
+interface DiscordUser {
+  username: string;
+  avatar: string;
+  id: string;
+}
 
 export default function DiscordConfirm() {
   const [isConfirming, setIsConfirming] = useState(false);
+  const [discordUser, setDiscordUser] = useState<DiscordUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDiscordIdentity() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("discord_identities")
+        .select("discord_user_id, discord_username")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (data) {
+        setDiscordUser({
+          username: data.discord_username || "Unknown",
+          avatar: "🎮",
+          id: data.discord_user_id,
+        });
+      }
+      setLoading(false);
+    }
+    fetchDiscordIdentity();
+  }, []);
 
   const handleConfirm = async () => {
     setIsConfirming(true);
@@ -30,9 +57,16 @@ export default function DiscordConfirm() {
     } catch (err) {
       console.error(err);
       setIsConfirming(false);
-      // Optional: Add some error toast or state here if needed
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -41,26 +75,35 @@ export default function DiscordConfirm() {
         <MessageCircle className="h-12 w-12 mx-auto text-accent" />
         <h1 className="text-xl font-bold">Discord連携の確認</h1>
         <p className="text-sm text-muted-foreground">
-          以下のDiscordアカウントで連携します。正しいか確認してください。
+          {discordUser
+            ? "以下のDiscordアカウントで連携します。正しいか確認してください。"
+            : "Discordアカウントを連携して、限定コンテンツにアクセスしましょう。"}
         </p>
       </div>
 
       {/* Discord User Info */}
-      <div className="glass-card rounded-xl p-5 space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center text-3xl">
-            {mockDiscordUser.avatar}
-          </div>
-          <div className="flex-1">
-            <p className="font-bold text-lg">{mockDiscordUser.username}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <User className="h-3 w-3" />
-              ID: {mockDiscordUser.id}
-            </p>
-            <Badge variant="default" className="mt-1">OAuth認証済み</Badge>
+      {discordUser ? (
+        <div className="glass-card rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center text-3xl">
+              {discordUser.avatar}
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-lg">{discordUser.username}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <User className="h-3 w-3" />
+                ID: {discordUser.id}
+              </p>
+              <Badge variant="default" className="mt-1">OAuth認証済み</Badge>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="glass-card rounded-xl p-5 text-center space-y-2">
+          <User className="h-10 w-10 mx-auto text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Discord未連携です。下のボタンから連携を開始してください。</p>
+        </div>
+      )}
 
       {/* Warning */}
       <Alert>
@@ -83,20 +126,24 @@ export default function DiscordConfirm() {
               <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
               連携中...
             </span>
-          ) : (
+          ) : discordUser ? (
             "このアカウントで連携する"
+          ) : (
+            "Discordアカウントを連携する"
           )}
         </Button>
 
-        <Button
-          variant="outline"
-          onClick={handleConfirm}
-          disabled={isConfirming}
-          className="w-full"
-        >
-          <RotateCcw className="h-4 w-4 mr-2" />
-          別のアカウントで連携する
-        </Button>
+        {discordUser && (
+          <Button
+            variant="outline"
+            onClick={handleConfirm}
+            disabled={isConfirming}
+            className="w-full"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            別のアカウントで連携する
+          </Button>
+        )}
       </div>
 
       {/* Info */}

@@ -1,15 +1,36 @@
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Package, TrendingUp, TrendingDown, UserPlus, Webhook, CreditCard, AlertTriangle, Megaphone, MessageCircle } from "lucide-react";
-import { formatCurrency, stripeStatusLabel } from "@/types";
+import { formatCurrency, stripeStatusLabel, StripeConnectStatus } from "@/types";
 import { sellerApi } from "@/services/api";
 import { ErrorBanner } from "@/components/shared";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function SellerDashboard() {
-  const stripeStatus = "verified" as const;
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus>("not_started");
+
+  useEffect(() => {
+    async function fetchStripeStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("stripe_connected_accounts")
+        .select("charges_enabled, payouts_enabled, details_submitted")
+        .eq("seller_id", user.id)
+        .maybeSingle();
+
+      if (data?.charges_enabled && data?.payouts_enabled) {
+        setStripeStatus("verified");
+      } else if (data?.details_submitted) {
+        setStripeStatus("pending");
+      }
+    }
+    fetchStripeStatus();
+  }, []);
 
   const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery({
     queryKey: ["seller", "stats"],
