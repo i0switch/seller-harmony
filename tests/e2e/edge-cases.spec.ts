@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockDiscordBotError } from './fixtures/auth.fixture';
+import { mockDiscordBotError, mockCheckoutSuccessApi } from './fixtures/auth.fixture';
 
 test.describe('Edge Cases', () => {
     /**
@@ -43,6 +43,7 @@ test.describe('Edge Cases', () => {
      * REQ: Checkout success page renders even without a valid session_id.
      */
     test('checkout success page renders without errors', async ({ page }) => {
+        await mockCheckoutSuccessApi(page);
         await page.goto('/checkout/success?session_id=cs_test_robustness');
         // Must not be a 404 or crash; Discord link must still be visible
         await expect(page.getByText('Discordを連携する')).toBeVisible({ timeout: 10000 });

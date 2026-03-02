@@ -1,7 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { mockCheckoutSuccessApi, mockDiscordConfirmApi } from './fixtures/auth.fixture';
 
 test.describe('Buyer Flow', () => {
     test('completes buyer return from checkout and discord connection', async ({ page }) => {
+        // Set up API mocks BEFORE navigation
+        await mockCheckoutSuccessApi(page);
+        await mockDiscordConfirmApi(page);
+
         // ── 1. Checkout Success Page ───────────────────────────────────────
         await page.goto('/checkout/success?session_id=cs_test_mock_123');
 

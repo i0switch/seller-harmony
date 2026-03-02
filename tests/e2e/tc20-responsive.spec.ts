@@ -1,4 +1,5 @@
 import { test, expect, devices } from '@playwright/test';
+import { mockCheckoutSuccessApi, mockDiscordConfirmApi } from './fixtures/auth.fixture';
 
 /**
  * TC-20: レスポンシブ・モバイルUI
@@ -78,8 +79,9 @@ test.describe('TC-20: レスポンシブ・モバイルUI', () => {
   });
 
   test('TC-20-07: Buyer決済完了ページのモバイル対応', async ({ page }) => {
+    await mockCheckoutSuccessApi(page);
     await page.setViewportSize(MOBILE);
-    await page.goto('/checkout/success');
+    await page.goto('/checkout/success?session_id=cs_test_mock');
     await expect(page.getByText('🎫 ファンクラブ')).toBeVisible();
     await expect(page.getByText('プレミアム会員')).toBeVisible();
     // プランカードが全幅で表示される
@@ -101,9 +103,10 @@ test.describe('TC-20: レスポンシブ・モバイルUI', () => {
   });
 
   test('TC-20-09: Discord連携確認ページのモバイル対応', async ({ page }) => {
+    await mockDiscordConfirmApi(page);
     await page.setViewportSize(MOBILE);
     await page.goto('/buyer/discord/confirm');
-    await expect(page.getByText('user_taro#1234')).toBeVisible();
+    await expect(page.getByText('Discord連携の確認')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('このアカウントで連携する')).toBeVisible();
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);

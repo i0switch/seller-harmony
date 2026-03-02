@@ -1,10 +1,15 @@
 import { test, expect } from '@playwright/test';
+import { mockCheckoutSuccessApi, mockDiscordConfirmApi } from './fixtures/auth.fixture';
 
 test.describe('TC-17: Buyer 決済完了フロー', () => {
 
+    test.beforeEach(async ({ page }) => {
+        await mockCheckoutSuccessApi(page);
+    });
+
     // ── TC-17-01: 決済完了ページの表示 ──────────────────────────────
     test('TC-17-01: 決済完了ページが正しく表示される', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
 
         // ヘッダー（BuyerLayout）
         await expect(page.getByText('🎫 ファンクラブ')).toBeVisible({ timeout: 15000 });
@@ -16,7 +21,7 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 
     // ── TC-17-02: 購入内容の表示 ────────────────────────────────────
     test('TC-17-02: 購入内容が正しく表示される', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
         await expect(page.getByText('決済が完了しました！')).toBeVisible({ timeout: 15000 });
 
         // 購入内容セクション
@@ -38,7 +43,7 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 
     // ── TC-17-03: Discord連携CTAの表示 ──────────────────────────────
     test('TC-17-03: Discord連携CTAが表示される', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
         await expect(page.getByText('決済が完了しました！')).toBeVisible({ timeout: 15000 });
 
         // Discord連携セクション
@@ -52,7 +57,7 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 
     // ── TC-17-04: Discord連携ボタンのリンク先 ───────────────────────
     test('TC-17-04: Discordを連携するボタンからDiscord確認ページへ', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
         await expect(page.getByText('決済が完了しました！')).toBeVisible({ timeout: 15000 });
 
         await page.getByRole('link', { name: /Discordを連携する/ }).click();
@@ -62,7 +67,7 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 
     // ── TC-17-05: 「あとで連携する」オプション ──────────────────────
     test('TC-17-05: あとで連携するとマイページリンクが表示される', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
         await expect(page.getByText('決済が完了しました！')).toBeVisible({ timeout: 15000 });
 
         // 「あとで連携する」リンク
@@ -75,7 +80,7 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 
     // ── TC-17-06: Discord未連携の警告表示 ────────────────────────────
     test('TC-17-06: Discord未連携の警告メッセージが表示される', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
         await expect(page.getByText('決済が完了しました！')).toBeVisible({ timeout: 15000 });
 
         // 警告メッセージ
@@ -84,7 +89,7 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 
     // ── TC-17-07: BuyerLayoutのヘッダー表示 ─────────────────────────
     test('TC-17-07: BuyerLayoutヘッダーが表示される', async ({ page }) => {
-        await page.goto('/checkout/success');
+        await page.goto('/checkout/success?session_id=cs_test_mock');
 
         // BuyerLayoutのヘッダー
         const header = page.locator('header');
@@ -94,6 +99,10 @@ test.describe('TC-17: Buyer 決済完了フロー', () => {
 });
 
 test.describe('TC-18: Buyer Discord連携フロー', () => {
+
+    test.beforeEach(async ({ page }) => {
+        await mockDiscordConfirmApi(page);
+    });
 
     // ── TC-18-01: Discord確認ページの表示 ────────────────────────────
     test('TC-18-01: Discord連携確認ページが表示される', async ({ page }) => {
@@ -125,12 +134,13 @@ test.describe('TC-18: Buyer Discord連携フロー', () => {
         await expect(page.getByRole('button', { name: '別のアカウントで連携する' })).toBeVisible();
     });
 
-    // ── TC-18-04: スマホ向け注意事項の表示 ──────────────────────────
+    // ── TC-18-04: 重要な注意事項の表示 ──────────────────────────────
     test('TC-18-04: スマホ向け注意事項が表示される', async ({ page }) => {
         await page.goto('/buyer/discord/confirm');
         await expect(page.getByText('Discord連携の確認')).toBeVisible({ timeout: 15000 });
 
-        await expect(page.getByText('スマホの方へ：')).toBeVisible();
+        // 重要な警告メッセージ
+        await expect(page.getByText('ブラウザでログイン中のDiscordアカウントが連携されます')).toBeVisible();
     });
 
     // ── TC-18-05: 連携後の処理説明 ──────────────────────────────────

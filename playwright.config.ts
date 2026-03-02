@@ -12,7 +12,7 @@ export default defineConfig({
         ['list'],              // Rich list output in terminal
     ],
     use: {
-        baseURL: 'http://localhost:8080',
+        baseURL: process.env.BASE_URL || 'http://localhost:8081',
         trace: 'on-first-retry',   // Capture trace on retry for debugging
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',

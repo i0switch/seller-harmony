@@ -33,10 +33,10 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
         await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/, { timeout: 15000 });
     });
 
-    test('TC-01-02c: Buyerカードから /checkout/success へ遷移', async ({ page }) => {
+    test('TC-01-02c: Buyerカードから /member/me へ遷移', async ({ page }) => {
         await page.goto('/');
         await page.getByText('🎫 Buyer / Member').click();
-        await expect(page).toHaveURL(/\/checkout\/success/, { timeout: 15000 });
+        await expect(page).toHaveURL(/\/member\/me/, { timeout: 15000 });
     });
 
     // ── TC-01-03: 404ページ ──────────────────────────────────────────
