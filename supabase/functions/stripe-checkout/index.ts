@@ -1,6 +1,6 @@
 /// <reference lib="deno.ns" />
 import Stripe from 'npm:stripe@^14.0.0';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
