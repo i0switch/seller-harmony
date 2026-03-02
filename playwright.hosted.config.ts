@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const hostedBaseURL =
     process.env.HOSTED_BASE_URL ??
-    'https://preview--member-bridge-flow.lovable.app';
+    'https://member-bridge-flow.lovable.app';
 
 const hostedStorageState =
     process.env.HOSTED_STORAGE_STATE ??

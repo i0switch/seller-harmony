@@ -7,11 +7,16 @@ if (!ALLOWED_ORIGIN) {
 }
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const DISCORD_BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') || '';
+
+const supabaseAdmin = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -37,21 +42,25 @@ Deno.serve(async (req: Request) => {
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // Only sellers and platform admins can use this endpoint
     const { data: userData } = await supabaseClient
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (userData?.role !== 'seller' && userData?.role !== 'platform_admin') {
+    const { guild_id, action, role_id, membership_id } = await req.json();
+
+    // Role-based access: sellers/admins can use all actions; buyers can only use grant_role
+    const userRole = userData?.role;
+    const isBuyer = userRole === 'buyer';
+    const isSellerOrAdmin = userRole === 'seller' || userRole === 'platform_admin';
+
+    if (!isSellerOrAdmin && !(isBuyer && action === 'grant_role')) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    const { guild_id, action, role_id } = await req.json();
 
     if (action === 'validate_bot_permission') {
       if (!guild_id || !role_id) {
@@ -60,11 +69,6 @@ Deno.serve(async (req: Request) => {
 
       // UPSERT: Ensure discord_servers record exists for this seller + guild
       // This is needed because onboarding calls validation before the record is saved
-      const supabaseAdmin = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-
       const { error: upsertError } = await supabaseAdmin
         .from('discord_servers')
         .upsert(
@@ -139,18 +143,161 @@ Deno.serve(async (req: Request) => {
       }
 
       // Update DB with permission status (reuse supabaseAdmin from above)
-      await supabaseAdmin
+      const { error: finalUpsertError } = await supabaseAdmin
         .from('discord_servers')
-        .update({
-          bot_permission_status: status,
-          bot_installed: true,
-          ...(guildName ? { guild_name: guildName } : {})
-        })
-        .eq('guild_id', guild_id)
-        .eq('seller_id', user.id);
+        .upsert(
+          {
+            seller_id: user.id,
+            guild_id: guild_id,
+            bot_permission_status: status,
+            bot_installed: true,
+            ...(guildName ? { guild_name: guildName } : {}),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'seller_id,guild_id' }
+        );
+
+      if (finalUpsertError) {
+        console.error('Final upsert failed:', finalUpsertError);
+        return new Response(
+          JSON.stringify({ error: finalUpsertError.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
 
       return new Response(
         JSON.stringify({ status, targetRole, botMaxPos }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'grant_role') {
+      if (!membership_id) {
+        throw new Error('membership_id is required');
+      }
+
+      const { data: membership, error: membershipError } = await supabaseAdmin
+        .from('memberships')
+        .select('id, buyer_id, seller_id, plan_id, status')
+        .eq('id', membership_id)
+        .maybeSingle();
+
+      if (membershipError || !membership) {
+        return new Response(JSON.stringify({ error: 'Membership not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const isBuyerOwner = userData?.role === 'buyer' && membership.buyer_id === user.id;
+      const isSellerOwner = userData?.role === 'seller' && membership.seller_id === user.id;
+      const isPlatformAdmin = userData?.role === 'platform_admin';
+
+      if (!isBuyerOwner && !isSellerOwner && !isPlatformAdmin) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!['active', 'grace_period', 'cancel_scheduled'].includes(membership.status)) {
+        return new Response(
+          JSON.stringify({ status: 'skipped', reason: 'membership_not_grantable' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: plan } = await supabaseAdmin
+        .from('plans')
+        .select('id, seller_id, discord_server_id, discord_role_id')
+        .eq('id', membership.plan_id)
+        .maybeSingle();
+
+      if (!plan?.discord_role_id) {
+        return new Response(
+          JSON.stringify({ status: 'skipped', reason: 'discord_role_not_configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let guildId = '';
+      if (plan.discord_server_id) {
+        const { data: serverById } = await supabaseAdmin
+          .from('discord_servers')
+          .select('guild_id')
+          .eq('id', plan.discord_server_id)
+          .maybeSingle();
+        guildId = serverById?.guild_id ?? '';
+      }
+
+      if (!guildId) {
+        const { data: serverBySeller } = await supabaseAdmin
+          .from('discord_servers')
+          .select('guild_id')
+          .eq('seller_id', plan.seller_id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        guildId = serverBySeller?.guild_id ?? '';
+      }
+
+      if (!guildId) {
+        return new Response(
+          JSON.stringify({ status: 'skipped', reason: 'discord_server_not_configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: identity } = await supabaseAdmin
+        .from('discord_identities')
+        .select('discord_user_id')
+        .eq('user_id', membership.buyer_id)
+        .maybeSingle();
+
+      if (!identity?.discord_user_id) {
+        return new Response(
+          JSON.stringify({ status: 'skipped', reason: 'discord_not_linked' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const grantRes = await fetch(
+        `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}/roles/${plan.discord_role_id}`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+        }
+      );
+
+      if (!grantRes.ok) {
+        const reason = await grantRes.text();
+
+        await supabaseAdmin.from('role_assignments').insert({
+          membership_id: membership.id,
+          discord_user_id: identity.discord_user_id,
+          guild_id: guildId,
+          role_id: plan.discord_role_id,
+          actual_state: 'failed',
+          error_reason: reason,
+        });
+
+        return new Response(
+          JSON.stringify({ status: 'failed', reason }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      await supabaseAdmin.from('role_assignments').insert({
+        membership_id: membership.id,
+        discord_user_id: identity.discord_user_id,
+        guild_id: guildId,
+        role_id: plan.discord_role_id,
+        actual_state: 'granted',
+        error_reason: null,
+      });
+
+      return new Response(
+        JSON.stringify({ status: 'ok', membership_id, action: 'role_granted' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -160,8 +307,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errorMsg }), {
+    console.error('discord-bot error:', error instanceof Error ? error.message : String(error));
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -16,13 +16,13 @@ export default function SellerMemberDetail() {
   const { id } = useParams();
   const { toast } = useToast();
 
-  const { data: member, isLoading: memberLoading, error: memberError } = useQuery({
+  const { data: member, isLoading: memberLoading, error: memberError, refetch: refetchMember } = useQuery({
     queryKey: ["seller", "members", id],
     queryFn: () => sellerApi.getMemberById(id!),
     enabled: !!id,
   });
 
-  const { data: timeline, isLoading: timelineLoading } = useQuery({
+  const { data: timeline, isLoading: timelineLoading, refetch: refetchTimeline } = useQuery({
     queryKey: ["seller", "members", id, "timeline"],
     queryFn: () => sellerApi.getMemberTimeline(id!),
     enabled: !!id,
@@ -61,8 +61,22 @@ export default function SellerMemberDetail() {
     );
   }
 
-  const handleAction = (action: string) => {
-    toast({ title: `${action}しました`, description: `${member.name} に対して${action}を実行しました` });
+  const handleAction = async (action: string) => {
+    try {
+      if (action === "手動オーバーライド") {
+        await sellerApi.overrideMember(id!);
+        toast({ title: "成功", description: `${member.name} を手動維持（オーバーライド）に設定しました` });
+        refetchMember();
+      } else if (action === "再同期") {
+        await sellerApi.retryDiscordRole(id!);
+        toast({ title: "成功", description: `${member.name} にロール再同期を実行しました` });
+        refetchTimeline();
+      } else {
+        toast({ title: `${action}しました`, description: `${member.name} に対して${action}を実行しました` });
+      }
+    } catch (err: any) {
+      toast({ title: "エラー", description: err.message, variant: "destructive" });
+    }
   };
 
   return (
@@ -133,6 +147,13 @@ export default function SellerMemberDetail() {
           confirmLabel="剥奪する"
           destructive
           onConfirm={() => handleAction("ロール剥奪")}
+        />
+        <ConfirmDialog
+          trigger={<Button size="sm" variant="outline"><Shield className="h-3 w-3 mr-1" />手動維持 (オーバーライド)</Button>}
+          title="手動でロールを維持しますか？"
+          description={`システムによる自動的なロール剥奪をブロックし、このメンバーのロールを手動で維持します。`}
+          confirmLabel="実行"
+          onConfirm={() => handleAction("手動オーバーライド")}
         />
         <Button size="sm" variant="outline" onClick={() => handleAction("再同期")}>
           <RefreshCw className="h-3 w-3 mr-1" />再同期

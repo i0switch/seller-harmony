@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
 import { useSellerAuth } from "@/hooks/useSellerAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function OnboardingProfile() {
   const navigate = useNavigate();
-  const { isOnboarded } = useSellerAuth();
+  const { isOnboarded, setOnboardingStep } = useSellerAuth();
 
   // Guard: redirect to dashboard if already onboarded
   if (isOnboarded) {
@@ -18,6 +19,7 @@ export default function OnboardingProfile() {
   const [displayName, setDisplayName] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
@@ -29,8 +31,46 @@ export default function OnboardingProfile() {
     return Object.keys(e).length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!validate()) return;
+    setIsSaving(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setErrors({ form: "認証情報が見つかりません。再ログインしてください。" });
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      const { error: profileError } = await supabase
+        .from("seller_profiles")
+        .upsert(
+          {
+            user_id: user.id,
+            store_name: serviceName.trim(),
+            status: "draft",
+            updated_at: now,
+          },
+          { onConflict: "user_id" }
+        );
+
+      if (profileError) {
+        setErrors({ form: profileError.message });
+        return;
+      }
+
+      await supabase
+        .from("users")
+        .update({ display_name: displayName.trim(), updated_at: now })
+        .eq("id", user.id);
+
+      setOnboardingStep("stripe");
+    } finally {
+      setIsSaving(false);
+    }
+
     navigate("/seller/onboarding/stripe");
   };
 
@@ -41,6 +81,7 @@ export default function OnboardingProfile() {
         <p className="text-sm text-muted-foreground mt-1">ファンに表示される情報を入力してください</p>
       </div>
       <div className="space-y-4">
+        {errors.form && <p className="text-xs text-destructive">{errors.form}</p>}
         <div className="space-y-2">
           <Label>表示名 <span className="text-destructive">*</span></Label>
           <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="例: 星野アイ" />
@@ -57,7 +98,7 @@ export default function OnboardingProfile() {
           {errors.supportEmail && <p className="text-xs text-destructive">{errors.supportEmail}</p>}
         </div>
       </div>
-      <Button onClick={handleNext} className="w-full">保存して次へ</Button>
+      <Button onClick={handleNext} className="w-full" disabled={isSaving}>{isSaving ? "保存中..." : "保存して次へ"}</Button>
     </OnboardingShell>
   );
 }

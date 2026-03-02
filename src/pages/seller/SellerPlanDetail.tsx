@@ -83,8 +83,10 @@ export default function SellerPlanEdit() {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = "プラン名を入力してください";
     if (!price || Number(price) <= 0) e.price = "有効な金額を入力してください";
-    if (!roleId.trim()) e.roleId = "DiscordロールIDを入力してください";
-    if (!guildId.trim()) e.guildId = "DiscordサーバーIDを入力してください";
+    if (roleId.trim() || guildId.trim()) {
+      if (!roleId.trim()) e.roleId = "DiscordロールIDを入力してください";
+      if (!guildId.trim()) e.guildId = "DiscordサーバーIDを入力してください";
+    }
     if (planType === "one_time" && grantPolicy === "limited" && (!grantDays || Number(grantDays) <= 0)) {
       e.grantDays = "有効な日数を入力してください";
     }
@@ -202,12 +204,12 @@ export default function SellerPlanEdit() {
         <div className="border-t pt-4 space-y-3">
           <Label className="text-sm font-medium">Discord設定</Label>
           <div className="space-y-2">
-            <Label className="text-xs">DiscordサーバーID <span className="text-destructive">*</span></Label>
+            <Label className="text-xs">DiscordサーバーID</Label>
             <Input value={guildId} onChange={(e) => { setGuildId(e.target.value); setDiscordCheck("idle"); }} placeholder="サーバーID" />
             {errors.guildId && <p className="text-xs text-destructive">{errors.guildId}</p>}
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">DiscordロールID <span className="text-destructive">*</span></Label>
+            <Label className="text-xs">DiscordロールID</Label>
             <Input value={roleId} onChange={(e) => { setRoleId(e.target.value); setDiscordCheck("idle"); }} placeholder="ロールID" />
             {errors.roleId && <p className="text-xs text-destructive">{errors.roleId}</p>}
           </div>

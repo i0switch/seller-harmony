@@ -111,6 +111,8 @@ export interface ISellerApi {
   getMembers(params: ListParams & SortParams & { billingStatus?: string }): Promise<PaginatedResponse<SellerMember>>;
   getMemberById(id: string): Promise<SellerMember | null>;
   getMemberTimeline(memberId: string): Promise<TimelineEvent[]>;
+  overrideMember(memberId: string): Promise<void>;
+  retryDiscordRole(memberId: string): Promise<void>;
 
   getCrosscheck(params?: { judgment?: string }): Promise<CrosscheckRow[]>;
   runCrosscheck(): Promise<{ jobId: string }>;

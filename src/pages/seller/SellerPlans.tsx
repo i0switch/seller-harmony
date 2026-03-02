@@ -6,17 +6,19 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Eye, EyeOff } from "lucide-react";
+import { Plus, Edit, Eye, EyeOff, Link2 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { sellerApi } from "@/services/api";
 import { ErrorBanner, LoadingSkeleton } from "@/components/shared";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function SellerPlans() {
   const [statusFilter, setStatusFilter] = useState<PlanStatus | "all">("all");
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: plans, isLoading, error, refetch } = useQuery({
     queryKey: ["seller", "plans"],
@@ -89,7 +91,7 @@ export default function SellerPlans() {
                 {p.grantPolicy === "limited" && <span>期限: {p.grantDays}日</span>}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 text-sm pt-2">
                 <Button asChild size="sm" variant="outline">
                   <Link to={`/seller/plans/${p.id}`}><Edit className="h-3 w-3 mr-1" />編集</Link>
                 </Button>
@@ -116,6 +118,25 @@ export default function SellerPlans() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+
+                {p.status === "published" && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="ml-auto"
+                    onClick={() => {
+                      const url = `${window.location.origin}/p/${p.id}`;
+                      navigator.clipboard.writeText(url);
+                      toast({
+                        title: "コピーしました",
+                        description: "購入ページのURLをクリップボードにコピーしました",
+                      });
+                    }}
+                  >
+                    <Link2 className="h-4 w-4 mr-1" />
+                    購入リンクをコピー
+                  </Button>
+                )}
               </div>
             </div>
           ))}

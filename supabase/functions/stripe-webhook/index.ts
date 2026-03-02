@@ -319,6 +319,34 @@ Deno.serve(async (req: Request) => {
           subscription_id: invoice.subscription,
         }, event.id);
       }
+    } else if (event.type === 'invoice.voided') {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (invoice.subscription) {
+        const now = new Date().toISOString();
+        const { data: updatedMembership } = await supabaseAdmin
+          .from('memberships')
+          .update({
+            status: 'payment_failed',
+            final_payment_failure_at: now
+          })
+          .eq('stripe_subscription_id', invoice.subscription)
+          .select('buyer_id, seller_id, plan_id, manual_override')
+          .maybeSingle();
+
+        await writeAuditLog('update', {
+          entity: 'membership',
+          action_detail: 'invoice_voided_payment_failed',
+          subscription_id: invoice.subscription,
+        }, event.id);
+
+        if (updatedMembership) {
+          if (!updatedMembership.manual_override) {
+            await removeDiscordRole(updatedMembership.buyer_id, updatedMembership.seller_id, updatedMembership.plan_id);
+          } else {
+            console.log('Manual override active. Skipping role removal for voided invoice.');
+          }
+        }
+      }
     } else if (event.type === 'customer.subscription.updated') {
       const sub = event.data.object as Stripe.Subscription;
       if (sub.cancel_at_period_end) {
@@ -462,9 +490,9 @@ Deno.serve(async (req: Request) => {
       })
       .eq('stripe_event_id', event.id);
 
-    // Return 200 to prevent Stripe from retrying (event is recorded for manual retry)
-    return new Response(JSON.stringify({ error: errorMsg }), {
-      status: 200,
+    // Return 5xx so Stripe retries automatically.
+    return new Response(JSON.stringify({ error: 'Webhook processing failed' }), {
+      status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }

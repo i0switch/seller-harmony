@@ -29,14 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [role, setRole] = useState<Role | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const [sellerOnboardingStep, setSellerOnboardingStep] = useState<OnboardingStep>(
-        (localStorage.getItem("seller_onboarding_step") as OnboardingStep) || "profile"
-    );
-
-    useEffect(() => {
-        // Sync onboarding step to local storage until moved to DB
-        localStorage.setItem("seller_onboarding_step", sellerOnboardingStep);
-    }, [sellerOnboardingStep]);
+    const [sellerOnboardingStep, setSellerOnboardingStep] = useState<OnboardingStep>("profile");
 
     useEffect(() => {
         const initializeAuth = async () => {
@@ -94,7 +87,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const logout = async () => {
         await supabase.auth.signOut();
-        localStorage.removeItem("seller_onboarding_step");
         setSellerOnboardingStep("profile");
         setSession(null);
         setUser(null);

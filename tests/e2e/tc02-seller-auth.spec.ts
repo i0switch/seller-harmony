@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockSellerAuth } from './fixtures/auth.fixture';
+import { SELLER_EMAIL, TEST_PASSWORD } from './fixtures/auth.fixture';
 
 test.describe('TC-02: Seller認証（新規登録・ログイン）', () => {
 
@@ -64,13 +64,12 @@ test.describe('TC-02: Seller認証（新規登録・ログイン）', () => {
 
     // ── TC-02-04: 有効な入力で送信 ─────────────────────────────────
     test('TC-02-04: 有効な入力でアカウント作成', async ({ page }) => {
-        // モック認証をセットアップ
-        await mockSellerAuth(page);
+        // Use real Supabase auth — submit form with real-ish data
         await page.goto('/seller/signup');
         await expect(page.getByPlaceholder('クリエイター名')).toBeVisible({ timeout: 15000 });
 
         await page.getByPlaceholder('クリエイター名').fill('テスト販売者');
-        await page.getByPlaceholder('you@example.com').fill('test-seller@example.com');
+        await page.getByPlaceholder('you@example.com').fill('test-seller-e2e-tc02-04@example.com');
         await page.getByPlaceholder('8文字以上').fill('password123');
         await page.getByRole('checkbox').check();
 
@@ -81,10 +80,10 @@ test.describe('TC-02: Seller認証（新規登録・ログイン）', () => {
         await expect(page.getByText('有効なメールアドレスを入力してください')).not.toBeVisible();
         await expect(page.getByText('パスワードは8文字以上にしてください')).not.toBeVisible();
 
-        // onboardingにリダイレクト or 成功
+        // Form submitted (may succeed or show server error, but form validation passed)
         await page.waitForTimeout(3000);
         const url = page.url();
-        // ナビゲーションが発生しているか確認（モック認証が通れば遷移するはず）
+        // Either redirected to onboarding/profile or stayed on signup (account may already exist)
         const navigated = url.includes('/seller/onboarding/profile') || url.includes('/seller/signup');
         expect(navigated).toBeTruthy();
     });
@@ -138,20 +137,19 @@ test.describe('TC-02: Seller認証（新規登録・ログイン）', () => {
         await expect(page.getByText('ログインに失敗しました')).toBeVisible({ timeout: 15000 });
     });
 
-    // ── TC-02-09: ログイン成功（モック） ────────────────────────────
-    test('TC-02-09: モック認証でログイン成功', async ({ page }) => {
-        await mockSellerAuth(page);
+    // ── TC-02-09: ログイン成功（実認証） ─────────────────────────
+    test('TC-02-09: 実認証でログイン成功', async ({ page }) => {
         await page.goto('/seller/login');
         await expect(page.getByLabel('メールアドレス')).toBeVisible({ timeout: 15000 });
 
-        await page.getByLabel('メールアドレス').fill('e2e-seller@example.com');
-        await page.getByLabel('パスワード').fill('Password123!');
+        await page.getByLabel('メールアドレス').fill(SELLER_EMAIL);
+        await page.getByLabel('パスワード').fill(TEST_PASSWORD);
         await page.getByRole('button', { name: 'ログイン' }).click();
 
         // ダッシュボード or オンボーディングにリダイレクト
-        await page.waitForTimeout(3000);
+        await page.waitForTimeout(5000);
         const url = page.url();
-        const redirected = url.includes('/seller/dashboard') || url.includes('/seller/onboarding') || url.includes('/seller/login');
+        const redirected = url.includes('/seller/dashboard') || url.includes('/seller/onboarding');
         expect(redirected).toBeTruthy();
     });
 

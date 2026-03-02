@@ -103,7 +103,13 @@ export const buyerApi: IBuyerApi = {
       body: { action: "grant_role", membership_id: membershipId },
     });
     if (error) throw error;
-    return { membershipId, action: "role_grant_requested" };
+    if (data?.status === 'failed') {
+      throw new Error(data.reason || 'Role grant failed');
+    }
+    if (data?.status === 'skipped') {
+      return { membershipId, action: `role_grant_skipped:${data.reason || 'unknown'}` };
+    }
+    return { membershipId, action: data?.action || "role_granted" };
   },
 
   async relinkDiscord(membershipId: string): Promise<{ membershipId: string; action: string }> {

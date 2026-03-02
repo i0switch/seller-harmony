@@ -8,7 +8,7 @@ if (!ALLOWED_ORIGIN) {
 }
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -22,7 +22,48 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Auth validation
+    // Admin client for queries
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    // --- Added: Public GET endpoint to fetch plan details for checkout page ---
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      const planId = url.searchParams.get('plan_id');
+
+      if (!planId) {
+        return new Response(JSON.stringify({ error: 'plan_id is required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Fetch plan safely using admin client
+      const { data: plan } = await supabaseAdmin
+        .from('plans')
+        .select(`*, seller_profiles (store_name)`)
+        .eq('id', planId)
+        .eq('status', 'published')
+        .is('deleted_at', null)
+        .single();
+
+      if (!plan || plan.is_active === false) {
+        return new Response(JSON.stringify({ error: 'Plan not found or inactive' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify(plan), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // --- End GET endpoint ---
+
+    // Auth validation for POST (Checkout session creation)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -36,12 +77,6 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // Admin client for internal lookups (bypasses RLS)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
     const { data: { user } } = await supabaseClient.auth.getUser();
@@ -83,7 +118,7 @@ Deno.serve(async (req: Request) => {
 
     if (!accountData) throw new Error("Seller has no Stripe account");
 
-    const origin = req.headers.get('origin') || 'http://localhost:5173';
+    const origin = req.headers.get('origin') || ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app';
     const feeRate = sellerProfile?.platform_fee_rate_bps ?? 1000;
 
     const isOneTime = plan.interval === 'one_time';
@@ -131,8 +166,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errorMsg }), {
+    console.error('stripe-checkout error:', error instanceof Error ? error.message : String(error));
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

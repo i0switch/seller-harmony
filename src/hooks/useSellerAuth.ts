@@ -1,4 +1,6 @@
+import { useCallback, useEffect, useState } from "react";
 import { useAuth, OnboardingStep } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const ONBOARDING_STEPS: OnboardingStep[] = ["profile", "stripe", "discord", "complete"];
 
@@ -14,10 +16,99 @@ export function useSellerAuth() {
     logout
   } = useAuth();
 
+  const [isResolvingOnboarding, setIsResolvingOnboarding] = useState(false);
+
+  const refreshOnboardingStep = useCallback(async () => {
+    if (!session?.user || role !== "seller") return;
+
+    setIsResolvingOnboarding(true);
+    try {
+      const sellerId = session.user.id;
+
+      const [{ data: profile }, { data: stripeAccounts }, { data: discordServers }] = await Promise.all([
+        supabase
+          .from("seller_profiles")
+          .select("status")
+          .eq("user_id", sellerId)
+          .maybeSingle(),
+        supabase
+          .from("stripe_connected_accounts")
+          .select("charges_enabled, payouts_enabled")
+          .eq("seller_id", sellerId)
+          .order("updated_at", { ascending: false })
+          .limit(1),
+        supabase
+          .from("discord_servers")
+          .select("bot_installed, bot_permission_status")
+          .eq("seller_id", sellerId)
+          .order("updated_at", { ascending: false })
+          .limit(1),
+      ]);
+
+      if (profile?.status === "active") {
+        setSellerOnboardingStep("complete");
+        return;
+      }
+
+      if (!profile) {
+        setSellerOnboardingStep("profile");
+        return;
+      }
+
+      const stripe = stripeAccounts?.[0];
+      if (!stripe || !(stripe.charges_enabled && stripe.payouts_enabled)) {
+        setSellerOnboardingStep("stripe");
+        return;
+      }
+
+      const discord = discordServers?.[0];
+      if (!discord || !discord.bot_installed || discord.bot_permission_status !== "ok") {
+        setSellerOnboardingStep("discord");
+        return;
+      }
+
+      setSellerOnboardingStep("complete");
+    } finally {
+      setIsResolvingOnboarding(false);
+    }
+  }, [role, session?.user, setSellerOnboardingStep]);
+
+  useEffect(() => {
+    refreshOnboardingStep();
+  }, [refreshOnboardingStep]);
+
   const isLoggedIn = !!session && role === "seller";
   const isOnboarded = currentStep === "complete";
 
-  const completeOnboarding = () => {
+  const completeOnboarding = async () => {
+    if (!session?.user) {
+      setSellerOnboardingStep("complete");
+      return;
+    }
+
+    const { data: existingProfile } = await supabase
+      .from("seller_profiles")
+      .select("store_name")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("seller_profiles")
+      .upsert(
+        {
+          user_id: session.user.id,
+          store_name: existingProfile?.store_name || "My Store",
+          status: "active",
+          updated_at: now,
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
     setSellerOnboardingStep("complete");
   };
 
@@ -49,8 +140,8 @@ export function useSellerAuth() {
   };
 
   return {
-    isOnboarded, isLoggedIn, isLoading, currentStep,
+    isOnboarded, isLoggedIn, isLoading: isLoading || isResolvingOnboarding, currentStep,
     completeOnboarding, setOnboardingStep, getNextStep, canAccessStep,
-    login, signup, logout,
+    login, signup, logout, refreshOnboardingStep,
   };
 }

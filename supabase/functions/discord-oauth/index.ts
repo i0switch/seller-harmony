@@ -7,7 +7,7 @@ if (!ALLOWED_ORIGIN) {
 }
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -40,12 +40,13 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
-    const redirect_uri = url.searchParams.get('redirect_uri') || 'http://localhost:5173/buyer/discord/result';
+    const redirect_uri = url.searchParams.get('redirect_uri') || (ALLOWED_ORIGIN ? `${ALLOWED_ORIGIN}/buyer/discord/result` : 'https://member-bridge-flow.lovable.app/buyer/discord/result');
 
     // Allowed redirect URI patterns (open-redirect prevention)
     const ALLOWED_REDIRECT_PATTERNS = [
       /^https?:\/\/localhost(:\d+)?\/buyer\/discord\/result$/,
       /^https:\/\/.*\.lovable\.app\/buyer\/discord\/result$/,
+      /^https:\/\/member-bridge-flow\.lovable\.app\/buyer\/discord\/result$/,
       /^https:\/\/.*\.supabase\.co\/.*$/,
     ];
 
@@ -193,8 +194,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errorMsg }), {
+    console.error('discord-oauth error:', error instanceof Error ? error.message : String(error));
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

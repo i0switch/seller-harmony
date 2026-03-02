@@ -16,7 +16,7 @@ export const platformApi: IPlatformApi = {
     getRetryQueue: (params) => httpClient.get<PaginatedResponse<RetryQueueJob>>("/api/platform/retry-queue", params as Record<string, string | number | boolean>),
     retryJob: (id) => httpClient.post<{ id: string, action: string }>(`/api/platform/retry-queue/${id}/retry`),
     pauseJob: (id) => httpClient.post<{ id: string, action: string }>(`/api/platform/retry-queue/${id}/pause`),
-    terminateJob: (id) => { throw new Error("Not Implemented") },
+    terminateJob: (id) => httpClient.post<{ id: string, action: string }>(`/api/platform/retry-queue/${id}/terminate`),
     getAnnouncements: (params?) => httpClient.get<SystemAnnouncement[]>("/api/platform/announcements", params as Record<string, string | number | boolean>),
-    saveAnnouncement: (data) => { throw new Error("Not Implemented") },
+    saveAnnouncement: (data) => httpClient.post<Partial<SystemAnnouncement> & { id: string }>("/api/platform/announcements", data),
 };

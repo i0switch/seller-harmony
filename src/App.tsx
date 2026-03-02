@@ -37,10 +37,12 @@ import SellerDiscordSettings from "./pages/seller/SellerDiscordSettings";
 import SellerLayout from "./layouts/SellerLayout";
 
 // Buyer
+import Purchase from "./pages/buyer/Purchase";
 import CheckoutSuccess from "./pages/buyer/CheckoutSuccess";
 import DiscordConfirm from "./pages/buyer/DiscordConfirm";
 import DiscordResult from "./pages/buyer/DiscordResult";
 import MemberMe from "./pages/buyer/MemberMe";
+import BuyerLogin from "./pages/buyer/BuyerLogin";
 import BuyerLayout from "./layouts/BuyerLayout";
 
 const queryClient = new QueryClient();
@@ -89,7 +91,9 @@ const App = () => (
             </Route>
 
             {/* Buyer */}
+            <Route path="/buyer/login" element={<BuyerLogin />} />
             <Route element={<BuyerLayout />}>
+              <Route path="/p/:id" element={<Purchase />} />
               <Route path="/checkout/success" element={<CheckoutSuccess />} />
               <Route path="/buyer/discord/confirm" element={<DiscordConfirm />} />
               <Route path="/buyer/discord/result" element={<DiscordResult />} />

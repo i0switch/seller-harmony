@@ -24,8 +24,23 @@ export default function PlatformRetryQueue() {
     queryFn: () => platformApi.getRetryQueue({ jobType: typeFilter, status: statusFilter, page, pageSize: PAGE_SIZE }),
   });
 
-  const handleAction = (r: RetryQueueJob, action: string) => {
-    toast({ title: `${action}しました`, description: `${r.tenantName} の ${retryJobTypeLabel[r.jobType]} ジョブを${action}しました` });
+  const handleAction = async (r: RetryQueueJob, action: "retry" | "pause" | "resume" | "terminate") => {
+    try {
+      if (action === "retry" || action === "resume") {
+        await platformApi.retryJob(r.id);
+      } else if (action === "pause") {
+        await platformApi.pauseJob(r.id);
+      } else {
+        await platformApi.terminateJob(r.id);
+      }
+
+      const actionLabel = action === "retry" ? "再試行" : action === "pause" ? "保留" : action === "resume" ? "再開" : "終了";
+      toast({ title: `${actionLabel}しました`, description: `${r.tenantName} の ${retryJobTypeLabel[r.jobType]} ジョブを${actionLabel}しました` });
+      refetch();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "ジョブ操作に失敗しました";
+      toast({ title: "エラー", description: msg, variant: "destructive" });
+    }
   };
 
   const columns: Column<RetryQueueJob>[] = [
@@ -46,15 +61,15 @@ export default function PlatformRetryQueue() {
                 title="今すぐ再試行しますか？"
                 description={`${r.tenantName} の ${retryJobTypeLabel[r.jobType]} ジョブを即時実行します。`}
                 confirmLabel="再試行"
-                onConfirm={() => handleAction(r, "再試行")}
+                onConfirm={() => handleAction(r, "retry")}
               />
-              <Button size="sm" variant="ghost" title="保留" onClick={() => handleAction(r, "保留")}>
+              <Button size="sm" variant="ghost" title="保留" onClick={() => handleAction(r, "pause")}>
                 <Pause className="h-3 w-3" />
               </Button>
             </>
           )}
           {r.status === "paused" && (
-            <Button size="sm" variant="ghost" title="再開" onClick={() => handleAction(r, "再開")}>
+            <Button size="sm" variant="ghost" title="再開" onClick={() => handleAction(r, "resume")}>
               <RefreshCw className="h-3 w-3" />
             </Button>
           )}
@@ -64,7 +79,7 @@ export default function PlatformRetryQueue() {
             description="このリトライジョブを完全に終了します。再試行は行われません。"
             confirmLabel="終了する"
             destructive
-            onConfirm={() => handleAction(r, "終了")}
+            onConfirm={() => handleAction(r, "terminate")}
           />
         </div>
       ),
@@ -129,11 +144,11 @@ export default function PlatformRetryQueue() {
                 <div className="flex gap-2">
                   {r.status === "pending" && (
                     <>
-                      <Button size="sm" variant="outline" onClick={() => handleAction(r, "再試行")}><RefreshCw className="h-3 w-3 mr-1" />再試行</Button>
-                      <Button size="sm" variant="outline" onClick={() => handleAction(r, "保留")}><Pause className="h-3 w-3 mr-1" />保留</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleAction(r, "retry")}><RefreshCw className="h-3 w-3 mr-1" />再試行</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleAction(r, "pause")}><Pause className="h-3 w-3 mr-1" />保留</Button>
                     </>
                   )}
-                  <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleAction(r, "終了")}><X className="h-3 w-3 mr-1" />終了</Button>
+                  <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleAction(r, "terminate")}><X className="h-3 w-3 mr-1" />終了</Button>
                 </div>
               </div>
             )}

@@ -8,7 +8,7 @@ if (!ALLOWED_ORIGIN) {
 }
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -23,7 +23,7 @@ function getOrigin(req: Request) {
     const url = new URL(origin);
     return `${url.protocol}//${url.host}`;
   }
-  return 'http://localhost:5173';
+  return ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app';
 }
 
 Deno.serve(async (req: Request) => {
@@ -114,8 +114,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errorMsg }), {
+    console.error('stripe-onboarding error:', error instanceof Error ? error.message : String(error));
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

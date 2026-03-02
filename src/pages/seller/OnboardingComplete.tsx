@@ -13,8 +13,8 @@ export default function OnboardingComplete() {
     return <Navigate to="/seller/dashboard" replace />;
   }
 
-  const handleGoToDashboard = () => {
-    completeOnboarding();
+  const handleGoToDashboard = async () => {
+    await completeOnboarding();
     navigate("/seller/dashboard");
   };
 

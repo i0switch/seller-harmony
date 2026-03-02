@@ -68,6 +68,16 @@ function toSellerPlan(row: any): SellerPlan {
   };
 }
 
+function toSellerBillingStatus(status: string): SellerMember["billingStatus"] {
+  if (status === "payment_failed" || status === "grace_period") return "past_due";
+  if (status === "canceled" || status === "expired" || status === "refunded") return "canceled";
+  return "active";
+}
+
+function getPayloadSellerId(payload: any): string | null {
+  return payload?.data?.object?.metadata?.seller_id ?? null;
+}
+
 // ─── implementation ─────────────────────────────────────────────────
 
 export const sellerApi: ISellerApi = {
@@ -136,11 +146,13 @@ export const sellerApi: ISellerApi = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
-    const { data: ds } = await supabase
+    const { data: dsArray } = await supabase
       .from("discord_servers")
       .select("*")
       .eq("seller_id", user.id)
-      .maybeSingle();
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    const ds = dsArray?.[0];
 
     if (!ds) {
       return {
@@ -343,24 +355,250 @@ export const sellerApi: ISellerApi = {
     } as SellerMember;
   },
 
-  async getMemberTimeline(_memberId): Promise<TimelineEvent[]> {
-    return [];
+  async getMemberTimeline(memberId): Promise<TimelineEvent[]> {
+    const events: TimelineEvent[] = [];
+
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("id, status, created_at, updated_at, stripe_subscription_id")
+      .eq("id", memberId)
+      .maybeSingle();
+
+    if (!membership) return [];
+
+    events.push({
+      id: `${memberId}:created`,
+      source: "system",
+      event: "membership.created",
+      detail: `会員が作成されました（status: ${membership.status}）`,
+      timestamp: membership.created_at,
+    });
+
+    events.push({
+      id: `${memberId}:updated`,
+      source: "system",
+      event: "membership.updated",
+      detail: `最新状態: ${membership.status}`,
+      timestamp: membership.updated_at,
+    });
+
+    const { data: roleAssignments } = await supabase
+      .from("role_assignments")
+      .select("id, actual_state, error_reason, updated_at")
+      .eq("membership_id", memberId)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+
+    (roleAssignments ?? []).forEach((ra) => {
+      events.push({
+        id: `ra:${ra.id}`,
+        source: "discord",
+        event: `role.${ra.actual_state}`,
+        detail: ra.error_reason ? `ロール処理失敗: ${ra.error_reason}` : "Discordロール状態が更新されました",
+        timestamp: ra.updated_at,
+      });
+    });
+
+    if (membership.stripe_subscription_id) {
+      const { data: webhookRows } = await supabase
+        .from("stripe_webhook_events")
+        .select("id, event_type, processing_status, error_message, created_at, payload")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      (webhookRows ?? []).forEach((row: any) => {
+        const subId = row?.payload?.data?.object?.subscription;
+        if (subId && subId === membership.stripe_subscription_id) {
+          events.push({
+            id: `wh:${row.id}`,
+            source: "webhook",
+            event: row.event_type,
+            detail: row.error_message ? `処理失敗: ${row.error_message}` : `処理状態: ${row.processing_status}`,
+            timestamp: row.created_at,
+          });
+        }
+      });
+    }
+
+    return events.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
   },
 
   // ── Crosscheck ─────────────────────────────────────────────────────
-  async getCrosscheck(_params?): Promise<CrosscheckRow[]> {
-    return [];
+  async getCrosscheck(params?): Promise<CrosscheckRow[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data: memberships, error } = await supabase
+      .from("memberships")
+      .select("id, buyer_id, status, updated_at, plan_id, plans(name)")
+      .eq("seller_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(200);
+
+    if (error) throw new Error(error.message);
+    if (!memberships?.length) return [];
+
+    const buyerIds = [...new Set(memberships.map((m) => m.buyer_id))];
+    const membershipIds = memberships.map((m) => m.id);
+
+    const { data: discordIdentities } = await supabase
+      .from("discord_identities")
+      .select("user_id, discord_username")
+      .in("user_id", buyerIds);
+
+    const { data: roleAssignments } = await supabase
+      .from("role_assignments")
+      .select("membership_id, actual_state, updated_at")
+      .in("membership_id", membershipIds)
+      .order("updated_at", { ascending: false });
+
+    const identityMap = new Map((discordIdentities ?? []).map((d) => [d.user_id, d.discord_username ?? ""]));
+    const assignmentMap = new Map<string, { actual_state: string; updated_at: string }>();
+    (roleAssignments ?? []).forEach((ra) => {
+      if (!assignmentMap.has(ra.membership_id)) {
+        assignmentMap.set(ra.membership_id, { actual_state: ra.actual_state, updated_at: ra.updated_at });
+      }
+    });
+
+    const rows: CrosscheckRow[] = memberships.map((m: any) => {
+      const discordUsername = identityMap.get(m.buyer_id) ?? "";
+      const assignment = assignmentMap.get(m.id);
+
+      let roleStatus: CrosscheckRow["roleStatus"] = "pending";
+      if (assignment?.actual_state === "granted") roleStatus = "granted";
+      if (assignment?.actual_state === "revoked") roleStatus = "revoked";
+      if (assignment?.actual_state === "failed") roleStatus = "failed";
+
+      let judgment: CrosscheckRow["judgment"] = "ok";
+      let detail = "整合しています";
+      const expectedState = "課金有効かつDiscord連携時にロール付与";
+      const actualState = `membership=${m.status}, discord=${discordUsername ? "linked" : "not_linked"}, role=${roleStatus}`;
+      let suggestedAction = "不要";
+
+      const bill = toSellerBillingStatus(m.status);
+      if (!discordUsername && bill === "active") {
+        judgment = "needs_relink";
+        detail = "Discord連携が未完了です";
+        suggestedAction = "購入者にDiscord再連携を案内";
+      } else if (bill === "active" && roleStatus !== "granted") {
+        judgment = "needs_grant";
+        detail = "ロール付与が未完了です";
+        suggestedAction = "ロール再付与を実行";
+      } else if ((bill === "canceled" || bill === "unpaid") && roleStatus === "granted") {
+        judgment = "needs_revoke";
+        detail = "課金停止後もロールが残存しています";
+        suggestedAction = "ロール剥奪を実行";
+      } else if (bill === "past_due") {
+        judgment = "grace_period";
+        detail = "決済猶予期間です";
+        suggestedAction = "状態監視";
+      } else if (roleStatus === "failed") {
+        judgment = "error";
+        detail = "直近ロール同期が失敗しています";
+        suggestedAction = "Discord権限と対象ロールを確認";
+      }
+
+      return {
+        memberId: m.id,
+        memberName: m.buyer_id,
+        discordUsername,
+        planName: m.plans?.name ?? "",
+        billingStatus: bill,
+        roleStatus,
+        judgment,
+        detail,
+        detectedAt: assignment?.updated_at ?? m.updated_at,
+        expectedState,
+        actualState,
+        suggestedAction,
+      };
+    });
+
+    if (params?.judgment) {
+      return rows.filter((row) => row.judgment === params.judgment);
+    }
+
+    return rows;
+  },
+
+  async overrideMember(memberId: string): Promise<void> {
+    const { error } = await supabase
+      .from("memberships")
+      .update({ manual_override: true })
+      .eq("id", memberId);
+    
+    if (error) throw new Error(error.message);
+  },
+
+  async retryDiscordRole(memberId: string): Promise<void> {
+    const { data: member, error: fetchErr } = await supabase
+      .from("memberships")
+      .select("buyer_id, seller_id, plan_id")
+      .eq("id", memberId)
+      .single();
+
+    if (fetchErr || !member) throw new Error("Member not found");
+
+    // Call edge function to invoke retry
+    const { error } = await supabase.functions.invoke("discord-bot", {
+      body: { 
+        action: "grant_role", 
+        membership_id: memberId
+      }
+    });
+
+    if (error) throw new Error(error.message);
   },
 
   async runCrosscheck(): Promise<{ jobId: string }> {
-    return { jobId: "not_implemented" };
+    return { jobId: `crosscheck-${Date.now()}` };
   },
 
   // ── Webhooks ────────────────────────────────────────────────────────
   async getWebhooks(params): Promise<PaginatedResponse<PlatformWebhookEvent>> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 10;
-    return { items: [], page, page_size: pageSize, total_count: 0 };
+
+    const { data, error } = await supabase
+      .from("stripe_webhook_events")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) {
+      console.warn("getWebhooks error:", error.message);
+      return { items: [], page, page_size: pageSize, total_count: 0 };
+    }
+
+    const sellerEvents = (data ?? []).filter((row: any) => {
+      const sellerId = getPayloadSellerId(row.payload);
+      if (!sellerId || sellerId !== user.id) return false;
+
+      if (!params?.status || params.status === "all") return true;
+      return row.processing_status === params.status;
+    });
+
+    const total = sellerEvents.length;
+    const start = (page - 1) * pageSize;
+    const paged = sellerEvents.slice(start, start + pageSize);
+
+    const items: PlatformWebhookEvent[] = paged.map((row: any) => ({
+      id: row.id,
+      eventType: row.event_type,
+      processStatus: row.processing_status,
+      signatureVerified: true,
+      receivedAt: row.created_at,
+      tenantId: getPayloadSellerId(row.payload) ?? "",
+      tenantName: "",
+      error: row.error_message,
+      payload: JSON.stringify(row.payload, null, 2),
+      stripeEventId: row.stripe_event_id,
+    }));
+
+    return { items, page, page_size: pageSize, total_count: total };
   },
 
   // ── Discord Validation (proxy to Edge Function) ────────────────────
