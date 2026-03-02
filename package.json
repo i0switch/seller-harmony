@@ -15,6 +15,11 @@
     "e2e:hosted:auth": "node ./tests/e2e/scripts/capture-hosted-storage.mjs",
     "e2e:hosted": "playwright test -c playwright.hosted.config.ts",
     "e2e:hosted:3x": "npm run e2e:hosted && npm run e2e:hosted && npm run e2e:hosted",
+    "qa:vscode:auto": "node ./tests/e2e/scripts/run-vscode-auto.mjs --repeat 1",
+    "qa:vscode:auto:3x": "node ./tests/e2e/scripts/run-vscode-auto.mjs --repeat 3",
+    "qa:vscode:auto:auth": "node ./tests/e2e/scripts/run-vscode-auto.mjs --repeat 1 --with-auth-capture",
+    "qa:vscode:auto:auth:3x": "node ./tests/e2e/scripts/run-vscode-auto.mjs --repeat 3 --with-auth-capture",
+    "qa:vscode:auto:dry": "node ./tests/e2e/scripts/run-vscode-auto.mjs --dry-run",
     "stripe:listen": "pwsh -ExecutionPolicy Bypass -File .\\.agent\\skills\\stripe-cli-dev\\scripts\\listen.ps1",
     "stripe:trigger": "pwsh -ExecutionPolicy Bypass -File .\\.agent\\skills\\stripe-cli-dev\\scripts\\trigger.ps1"
   },

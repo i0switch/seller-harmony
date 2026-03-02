@@ -53,6 +53,24 @@ Deno.serve(async (req: Request) => {
         throw new Error('guild_id and role_id are required');
       }
 
+      // UPSERT: Ensure discord_servers record exists for this seller + guild
+      // This is needed because onboarding calls validation before the record is saved
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      const { error: upsertError } = await supabaseAdmin
+        .from('discord_servers')
+        .upsert(
+          { seller_id: user.id, guild_id, bot_installed: false, bot_permission_status: 'unknown' },
+          { onConflict: 'seller_id,guild_id', ignoreDuplicates: true }
+        );
+
+      if (upsertError) {
+        console.error('Failed to upsert discord_servers:', upsertError);
+      }
+
       // OWNERSHIP CHECK: Verify if this guild belongs to the seller
       const { data: serverData, error: serverError } = await supabaseClient
         .from('discord_servers')
@@ -104,11 +122,7 @@ Deno.serve(async (req: Request) => {
 
       const status = botMaxPos > targetRole.position ? 'ok' : 'insufficient';
 
-      // Update DB with permission status
-      const supabaseAdmin = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
+      // Update DB with permission status (reuse supabaseAdmin from above)
       await supabaseAdmin
         .from('discord_servers')
         .update({ bot_permission_status: status })

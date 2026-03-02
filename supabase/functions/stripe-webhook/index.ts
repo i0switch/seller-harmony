@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
 
         const initialStatus = discordIdentity ? 'active' : 'pending_discord';
 
-        await supabaseAdmin.from('memberships').upsert(
+        const { error: upsertError } = await supabaseAdmin.from('memberships').upsert(
           {
             buyer_id,
             plan_id,
@@ -230,6 +230,11 @@ Deno.serve(async (req: Request) => {
           },
           { onConflict: 'buyer_id,plan_id' }
         );
+
+        if (upsertError) {
+          console.error('[stripe-webhook] membership upsert error:', upsertError);
+          throw new Error(`Membership upsert failed: ${upsertError.message}`);
+        }
 
         if (discordIdentity) {
           await assignDiscordRole(buyer_id, seller_id, plan_id);

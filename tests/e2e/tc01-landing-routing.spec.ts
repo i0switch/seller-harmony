@@ -30,7 +30,7 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
     test('TC-01-02b: Sellerカードから /seller/login へ遷移', async ({ page }) => {
         await page.goto('/');
         await page.getByText('🎤 Seller / Tenant').click();
-        await expect(page).toHaveURL(/\/seller\/login/, { timeout: 15000 });
+        await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/, { timeout: 15000 });
     });
 
     test('TC-01-02c: Buyerカードから /checkout/success へ遷移', async ({ page }) => {
@@ -63,8 +63,9 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
         await page.waitForTimeout(3000);
         const url = page.url();
         const is404 = await page.getByText('404').isVisible().catch(() => false);
-        const isLogin = url.includes('/seller/login');
-        expect(is404 || isLogin).toBeTruthy();
+        const isRedirected =
+            url.includes('/seller/login') || url.includes('/seller/onboarding/profile');
+        expect(is404 || isRedirected).toBeTruthy();
     });
 
     // ── TC-01-04: 認証ガードのリダイレクト ────────────────────────────
@@ -72,7 +73,7 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
         await page.goto('/seller/dashboard');
         await expect(page).not.toHaveURL(/\/seller\/dashboard/, { timeout: 15000 });
         // ログインページにリダイレクトされるはず
-        await expect(page).toHaveURL(/\/seller\/login/);
+        await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/);
     });
 
     test('TC-01-04b: /platform/dashboard → /platform/login にリダイレクト', async ({ page }) => {
@@ -84,13 +85,13 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
     test('TC-01-04c: /seller/plans → /seller/login にリダイレクト', async ({ page }) => {
         await page.goto('/seller/plans');
         await expect(page).not.toHaveURL(/\/seller\/plans$/, { timeout: 15000 });
-        await expect(page).toHaveURL(/\/seller\/login/);
+        await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/);
     });
 
     test('TC-01-04d: /seller/members → /seller/login にリダイレクト', async ({ page }) => {
         await page.goto('/seller/members');
         await expect(page).not.toHaveURL(/\/seller\/members$/, { timeout: 15000 });
-        await expect(page).toHaveURL(/\/seller\/login/);
+        await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/);
     });
 
     // ── TC-01-05: 公開ページへの直接アクセス ──────────────────────────

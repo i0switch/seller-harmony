@@ -41,8 +41,6 @@ export default function OnboardingStripe() {
     }
   };
 
-  
-
   return (
     <OnboardingShell step={1}>
       <div>
@@ -72,8 +70,6 @@ export default function OnboardingStripe() {
             <Button variant="outline" className="w-full" onClick={startOnboarding} disabled={isLoading}>
               <ExternalLink className="h-4 w-4 mr-2" /> {isLoading ? "Stripeを開く..." : "Stripeオンボーディングを再開"}
             </Button>
-
-
           </div>
         )}
 

@@ -5,15 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { MessageCircle, AlertTriangle, RotateCcw, User, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-interface DiscordUser {
-  username: string;
-  avatar: string;
-  id: string;
-}
-
 export default function DiscordConfirm() {
   const [isConfirming, setIsConfirming] = useState(false);
-  const [discordUser, setDiscordUser] = useState<DiscordUser | null>(null);
+  const [discordUser, setDiscordUser] = useState<{ username: string; avatar: string; id: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,7 +26,7 @@ export default function DiscordConfirm() {
       if (data) {
         setDiscordUser({
           username: data.discord_username || "Unknown",
-          avatar: "🎮",
+          avatar: "🎮", // Avatar URL is not stored yet, using icon as fallback
           id: data.discord_user_id,
         });
       }
@@ -73,16 +67,16 @@ export default function DiscordConfirm() {
       {/* Header */}
       <div className="glass-card rounded-xl p-6 text-center space-y-3">
         <MessageCircle className="h-12 w-12 mx-auto text-accent" />
-        <h1 className="text-xl font-bold">Discord連携の確認</h1>
+        <h1 className="text-xl font-bold">Discord連携{discordUser ? "の確認" : ""}</h1>
         <p className="text-sm text-muted-foreground">
           {discordUser
             ? "以下のDiscordアカウントで連携します。正しいか確認してください。"
-            : "Discordアカウントを連携して、限定コンテンツにアクセスしましょう。"}
+            : "Discordアカウントを連携して、限定サーバーに参加しましょう。"}
         </p>
       </div>
 
-      {/* Discord User Info */}
-      {discordUser ? (
+      {/* Discord User Info (Only if already connected once) */}
+      {discordUser && (
         <div className="glass-card rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center text-3xl">
@@ -98,19 +92,14 @@ export default function DiscordConfirm() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="glass-card rounded-xl p-5 text-center space-y-2">
-          <User className="h-10 w-10 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Discord未連携です。下のボタンから連携を開始してください。</p>
-        </div>
       )}
 
       {/* Warning */}
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription className="text-xs">
-          <span className="font-semibold">スマホの方へ：</span>ブラウザでログイン中のDiscordアカウントが表示されます。
-          普段と違うアカウントの場合は、「別のアカウントで連携する」を選んでください。
+          <span className="font-semibold">重要：</span>ブラウザでログイン中のDiscordアカウントが連携されます。
+          {discordUser ? " 普段と違うアカウントの場合は、「別のアカウントで連携する」を選んでください。" : ""}
         </AlertDescription>
       </Alert>
 
@@ -123,13 +112,11 @@ export default function DiscordConfirm() {
         >
           {isConfirming ? (
             <span className="flex items-center gap-2">
-              <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               連携中...
             </span>
-          ) : discordUser ? (
-            "このアカウントで連携する"
           ) : (
-            "Discordアカウントを連携する"
+            discordUser ? "このアカウントで連携する" : "Discordを連携する"
           )}
         </Button>
 

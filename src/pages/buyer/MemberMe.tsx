@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   CreditCard, MessageCircle, RefreshCw, Shield, ExternalLink, AlertTriangle,
-  ChevronDown, ChevronUp, Clock, User,
+  ChevronDown, ChevronUp, Clock, User, Loader2
 } from "lucide-react";
 import { ConfirmDialog, EmptyState, LoadingSkeleton, ErrorBanner } from "@/components/shared";
 import { buyerApi } from "@/services/api";
@@ -153,8 +153,8 @@ function PlanCard({ plan }: { plan: BuyerMembership }) {
 }
 
 export default function MemberMe() {
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [discordUsername, setDiscordUsername] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<{ email: string; discordUsername?: string } | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
 
   const { data: memberships = [], isLoading, error, refetch } = useQuery({
     queryKey: ["buyer", "memberships"],
@@ -164,20 +164,27 @@ export default function MemberMe() {
   useEffect(() => {
     async function fetchUserInfo() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setUserEmail(user.email || "");
+      if (!user) {
+        setUserLoading(false);
+        return;
+      }
 
-      const { data: identity } = await supabase
+      const { data: discordIdentity } = await supabase
         .from("discord_identities")
         .select("discord_username")
         .eq("user_id", user.id)
         .maybeSingle();
-      setDiscordUsername(identity?.discord_username || null);
+
+      setUserInfo({
+        email: user.email || "",
+        discordUsername: discordIdentity?.discord_username,
+      });
+      setUserLoading(false);
     }
     fetchUserInfo();
   }, []);
 
-  if (isLoading) return <LoadingSkeleton type="cards" rows={3} />;
+  if (isLoading || userLoading) return <LoadingSkeleton type="cards" rows={3} />;
   if (error) return <ErrorBanner error={error} onRetry={refetch} />;
 
   const activePlans = memberships.filter(p =>
@@ -196,8 +203,8 @@ export default function MemberMe() {
             <User className="h-7 w-7 text-accent" />
           </div>
           <div>
-            <h1 className="font-bold text-lg">{discordUsername || userEmail || "ユーザー"}</h1>
-            <p className="text-sm text-muted-foreground">{userEmail}</p>
+            <h1 className="font-bold text-lg">{userInfo?.discordUsername || "Discord未連携"}</h1>
+            <p className="text-sm text-muted-foreground">{userInfo?.email}</p>
           </div>
         </div>
       </div>

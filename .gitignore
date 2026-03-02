@@ -26,6 +26,23 @@ dist-ssr
 # Playwright hosted auth state (secret)
 .auth/
 
+# Test results & reports (generated/binary)
+test-results/
+playwright-report/
+playwright-results.txt
+lint_output.txt
+lint_results*.txt
+
+# Agent skill files
+.agent/
+
+# QA automation logs
+.qa-automation/
+
+# Python virtual environment
+.venv/
+__pycache__/
+
 # Environment files (secrets)
 .env
 .env.*

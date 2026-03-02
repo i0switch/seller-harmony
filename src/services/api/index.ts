@@ -1,9 +1,11 @@
 import type { IPlatformApi, ISellerApi, IBuyerApi } from "../api.types";
 
 import { platformApi as platformHttp } from "./http/platform";
-import { sellerApi as sellerHttp } from "./http/seller";
-import { buyerApi as buyerHttp } from "./http/buyer";
+// Seller API now uses Supabase-direct implementation instead of HTTP (localhost:8000)
+import { sellerApi as sellerSupabase } from "./supabase/seller";
+// Buyer API now uses Supabase-direct implementation instead of HTTP (localhost:8000)
+import { buyerApi as buyerSupabase } from "./supabase/buyer";
 
 export const platformApi: IPlatformApi = platformHttp;
-export const sellerApi: ISellerApi = sellerHttp;
-export const buyerApi: IBuyerApi = buyerHttp;
+export const sellerApi: ISellerApi = sellerSupabase;
+export const buyerApi: IBuyerApi = buyerSupabase;

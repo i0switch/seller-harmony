@@ -79,7 +79,7 @@ export default function SellerPlans() {
                 </div>
                 <div className="text-right shrink-0 ml-4">
                   <p className="text-lg font-bold">{formatCurrency(p.price)}</p>
-                  <p className="text-xs text-muted-foreground">{p.planType === "subscription" ? "/ 月" : "単発"}</p>
+                  <p className="text-xs text-muted-foreground">{p.planType === "subscription" ? "/ 月" : p.planType === "subscription_year" ? "/ 年" : "単発"}</p>
                 </div>
               </div>
 

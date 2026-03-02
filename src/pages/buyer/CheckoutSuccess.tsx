@@ -33,15 +33,12 @@ export default function CheckoutSuccess() {
         return;
       }
       try {
+        // Supabaseから session_id に紐づく membership + plan を取得
         const { data: membership, error: membershipError } = await supabase
           .from("memberships")
           .select(`
             *,
-            plans:plan_id (name, price, currency, interval, discord_server_id),
-            seller:seller_id (
-              display_name,
-              seller_profiles!inner (store_name)
-            )
+            plans:plan_id (name, price, currency, interval, discord_server_id)
           `)
           .eq("stripe_checkout_session_id", sessionId)
           .maybeSingle();
@@ -50,8 +47,19 @@ export default function CheckoutSuccess() {
 
         if (membership) {
           const planData = membership.plans as any;
-          const seller = membership.seller as any;
 
+          // seller_profiles を別クエリで取得 (直接FKなし)
+          let sellerStoreName = "販売者";
+          if (membership.seller_id) {
+            const { data: sellerData } = await supabase
+              .from("seller_profiles")
+              .select("store_name")
+              .eq("user_id", membership.seller_id)
+              .maybeSingle();
+            sellerStoreName = sellerData?.store_name || "販売者";
+          }
+
+          // Discord server名の取得
           let guildName = "";
           if (planData?.discord_server_id) {
             const { data: server } = await supabase
@@ -64,7 +72,7 @@ export default function CheckoutSuccess() {
 
           setPlan({
             planName: planData?.name || "プラン",
-            sellerName: seller?.seller_profiles?.[0]?.store_name || seller?.display_name || "販売者",
+            sellerName: sellerStoreName,
             planType: planData?.interval === "one_time" ? "one_time" : "subscription",
             price: planData?.price || 0,
             currency: planData?.currency || "JPY",
@@ -101,6 +109,9 @@ export default function CheckoutSuccess() {
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error || "購入情報が見つかりません"}</AlertDescription>
         </Alert>
+        <Button asChild variant="outline" className="w-full">
+          <Link to="/buyer/dashboard">ダッシュボードへ戻る</Link>
+        </Button>
       </div>
     );
   }
@@ -152,7 +163,7 @@ export default function CheckoutSuccess() {
           <MessageCircle className="h-10 w-10 mx-auto text-accent" />
           <h2 className="font-bold">Discordに参加して連携しよう</h2>
           <p className="text-sm text-muted-foreground">
-            {plan.guildName ? `「${plan.guildName}」サーバーに参加し、` : ""}限定コンテンツにアクセスしましょう。
+            「{plan.guildName || "限定"}」サーバーに参加し、限定コンテンツにアクセスしましょう。
           </p>
         </div>
 

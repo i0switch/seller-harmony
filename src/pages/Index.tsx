@@ -24,7 +24,7 @@ export default function Index() {
             <p className="text-xs text-muted-foreground mt-1">販売者としてログイン</p>
           </Link>
           <Link
-            to="/checkout/success"
+            to="/member/me"
             className="block glass-card rounded-xl p-4 hover:shadow-md transition-shadow"
           >
             <p className="font-semibold">🎫 Buyer / Member</p>

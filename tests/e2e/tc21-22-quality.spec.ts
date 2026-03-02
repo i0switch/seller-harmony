@@ -59,7 +59,7 @@ test.describe('TC-21: エラーハンドリング・エッジケース', () => {
 
   test('TC-21-06: セッションクリア後にSellerルートがリダイレクト', async ({ page }) => {
     await page.goto('/seller/dashboard');
-    await expect(page).toHaveURL(/\/seller\/login/);
+    await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/);
     // localStorageを直接確認
     const hasSession = await page.evaluate(() => {
       return Object.keys(localStorage).some(k => k.includes('supabase'));

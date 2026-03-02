@@ -26,10 +26,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // User-level client for auth verification and RLS-gated reads
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Admin client for internal lookups (bypasses RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
     const { data: { user } } = await supabaseClient.auth.getUser();
@@ -38,15 +45,23 @@ Deno.serve(async (req: Request) => {
     const { plan_id } = await req.json();
     if (!plan_id) throw new Error("plan_id is required");
 
+    // Use user client for plan query (respects RLS: only public plans visible)
     const { data: plan } = await supabaseClient
       .from('plans')
-      .select('*, seller_profiles(*)')
+      .select('*')
       .eq('id', plan_id)
       .single();
 
     if (!plan) throw new Error("Plan not found");
 
-    const { data: accountData } = await supabaseClient
+    // Use admin client for internal data (seller_profiles and stripe accounts)
+    const { data: sellerProfile } = await supabaseAdmin
+      .from('seller_profiles')
+      .select('*')
+      .eq('user_id', plan.seller_id)
+      .single();
+
+    const { data: accountData } = await supabaseAdmin
       .from('stripe_connected_accounts')
       .select('*')
       .eq('seller_id', plan.seller_id)
@@ -55,7 +70,7 @@ Deno.serve(async (req: Request) => {
     if (!accountData) throw new Error("Seller has no Stripe account");
 
     const origin = req.headers.get('origin') || 'http://localhost:5173';
-    const feeRate = plan.seller_profiles?.platform_fee_rate_bps ?? 1000;
+    const feeRate = sellerProfile?.platform_fee_rate_bps ?? 1000;
 
     const isOneTime = plan.interval === 'one_time';
 

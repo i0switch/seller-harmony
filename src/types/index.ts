@@ -151,7 +151,7 @@ export interface PlatformAlert {
 // ===== Seller Types =====
 
 export type PlanStatus = "published" | "stopped" | "draft";
-export type PlanType = "subscription" | "one_time";
+export type PlanType = "subscription" | "subscription_year" | "one_time";
 export type GrantPolicy = "unlimited" | "limited";
 export type SellerMemberBillingStatus = "active" | "past_due" | "canceled" | "unpaid";
 
@@ -311,7 +311,7 @@ export const planStatusVariant: Record<PlanStatus, "default" | "secondary" | "ou
   published: "default", stopped: "secondary", draft: "outline",
 };
 export const planTypeLabel: Record<PlanType, string> = {
-  subscription: "月額", one_time: "単発",
+  subscription: "月額", subscription_year: "年額", one_time: "単発",
 };
 
 export const sellerBillingStatusLabel: Record<SellerMemberBillingStatus, string> = {

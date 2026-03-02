@@ -11,26 +11,8 @@ import { ErrorBanner } from "@/components/shared";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function SellerDashboard() {
-  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus>("not_started");
-
-  useEffect(() => {
-    async function fetchStripeStatus() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("stripe_connected_accounts")
-        .select("charges_enabled, payouts_enabled, details_submitted")
-        .eq("seller_id", user.id)
-        .maybeSingle();
-
-      if (data?.charges_enabled && data?.payouts_enabled) {
-        setStripeStatus("verified");
-      } else if (data?.details_submitted) {
-        setStripeStatus("pending");
-      }
-    }
-    fetchStripeStatus();
-  }, []);
+  const [stripeStatus, setStripeStatus] = useState<"not_started" | "pending" | "verified">("not_started");
+  const [stripeLoading, setStripeLoading] = useState(true);
 
   const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery({
     queryKey: ["seller", "stats"],
@@ -47,7 +29,32 @@ export default function SellerDashboard() {
     queryFn: () => sellerApi.getDiscordSettings(),
   });
 
-  const isLoading = statsLoading || annLoading || discordLoading;
+  useEffect(() => {
+    async function fetchStripeStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setStripeLoading(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("stripe_connected_accounts")
+        .select("charges_enabled, payouts_enabled, details_submitted")
+        .eq("seller_id", user.id)
+        .maybeSingle();
+
+      if (data?.charges_enabled && data?.payouts_enabled) {
+        setStripeStatus("verified");
+      } else if (data?.details_submitted) {
+        setStripeStatus("pending");
+      } else {
+        setStripeStatus("not_started");
+      }
+      setStripeLoading(false);
+    }
+    fetchStripeStatus();
+  }, []);
+
+  const isLoading = statsLoading || annLoading || discordLoading || stripeLoading;
   const error = statsError || annError || discordError;
 
   if (error) {
@@ -104,7 +111,11 @@ export default function SellerDashboard() {
             <p className="text-xs text-muted-foreground">決済受付状態</p>
           </div>
         </div>
-        <Badge variant="default">{stripeStatusLabel[stripeStatus]}</Badge>
+        <Badge
+          variant={stripeStatus === "verified" ? "default" : stripeStatus === "pending" ? "secondary" : "outline"}
+        >
+          {stripeStatusLabel[stripeStatus]}
+        </Badge>
       </div>
 
       {/* Discord Warning */}

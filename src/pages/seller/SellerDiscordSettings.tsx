@@ -49,40 +49,29 @@ export default function SellerDiscordSettings() {
           role_id: defaultRoleId,
         },
       });
+
       if (error) throw error;
 
-      if (data?.status === "ok") {
-        setVerifyResult({
-          botInstalled: true,
-          manageRolesPermission: true,
-          roleExists: true,
-          botRoleHierarchy: true,
-        });
+      if (data.status === "ok") {
+        setVerifyResult({ botInstalled: true, manageRolesPermission: true, roleExists: true, botRoleHierarchy: true });
         setVerifyErrorCode(null);
         setVerifyStatus("ok");
         toast({ title: "検証完了", description: "すべてのチェック項目が正常です" });
       } else {
         setVerifyResult({
-          botInstalled: data?.checks?.botInstalled ?? false,
-          manageRolesPermission: data?.checks?.manageRolesPermission ?? false,
-          roleExists: data?.checks?.roleExists ?? false,
-          botRoleHierarchy: data?.checks?.botRoleHierarchy ?? false,
+          botInstalled: data.checks?.botInstalled ?? false,
+          manageRolesPermission: data.checks?.manageRolesPermission ?? false,
+          roleExists: data.checks?.roleExists ?? false,
+          botRoleHierarchy: data.checks?.botRoleHierarchy ?? false,
         });
-        setVerifyErrorCode(data?.error_code || "DISCORD_GUILD_ACCESS_DENIED");
+        setVerifyErrorCode(data.errorCode || "UNKNOWN_ERROR");
         setVerifyStatus("error");
         toast({ title: "検証失敗", description: data?.message || "問題が見つかりました", variant: "destructive" });
       }
     } catch (err) {
       console.error("Discord verification failed:", err);
-      setVerifyResult({
-        botInstalled: false,
-        manageRolesPermission: false,
-        roleExists: false,
-        botRoleHierarchy: false,
-      });
-      setVerifyErrorCode("DISCORD_GUILD_ACCESS_DENIED");
       setVerifyStatus("error");
-      toast({ title: "検証エラー", description: "Edge Functionの呼び出しに失敗しました", variant: "destructive" });
+      toast({ title: "エラー", description: "検証中にエラーが発生しました", variant: "destructive" });
     }
   };
 

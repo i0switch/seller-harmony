@@ -166,6 +166,7 @@ export default function SellerPlanEdit() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="subscription">月額（サブスク）</SelectItem>
+                <SelectItem value="subscription_year">年額（サブスク）</SelectItem>
                 <SelectItem value="one_time">単発</SelectItem>
               </SelectContent>
             </Select>
