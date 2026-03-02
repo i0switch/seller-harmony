@@ -1,8 +1,13 @@
 /// <reference lib="deno.ns" />
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
 
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN');
+if (!ALLOWED_ORIGIN) {
+  console.error('ALLOWED_ORIGIN is not configured. CORS will reject all cross-origin requests.');
+}
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -76,9 +81,10 @@ Deno.serve(async (req: Request) => {
       }
 
       // Server-side state storage: save state bound to user for callback verification
+      // BUG-09 fix: Use NULL instead of empty string for placeholder discord_user_id
       await supabaseAdmin.from('discord_identities').upsert({
         user_id: user.id,
-        discord_user_id: '', // placeholder until OAuth completes
+        discord_user_id: null, // placeholder until OAuth completes (NULL avoids UNIQUE violation)
         discord_username: '',
         oauth_state: state,
         oauth_state_created_at: new Date().toISOString(),
@@ -148,6 +154,11 @@ Deno.serve(async (req: Request) => {
     const meData = await meResponse.json();
 
     if (shouldSave) {
+      // BUG-09 fix: Validate discord_user_id is not empty to prevent UNIQUE constraint violation
+      if (!meData.id || String(meData.id).trim() === '') {
+        throw new Error('Discord API returned an empty user ID. Please try again.');
+      }
+
       // Upsert discord identity (use service role to bypass RLS for upsert)
       // Clear oauth_state after successful use (one-time use)
       await supabaseAdmin.from('discord_identities').upsert({

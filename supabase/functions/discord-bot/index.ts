@@ -1,8 +1,13 @@
 /// <reference lib="deno.ns" />
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
 
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN');
+if (!ALLOWED_ORIGIN) {
+  console.error('ALLOWED_ORIGIN is not configured. CORS will reject all cross-origin requests.');
+}
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -122,10 +127,25 @@ Deno.serve(async (req: Request) => {
 
       const status = botMaxPos > targetRole.position ? 'ok' : 'insufficient';
 
+      // Fetch Guild info to get the name
+      const guildRes = await fetch(
+        `https://discord.com/api/v10/guilds/${guild_id}`,
+        { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
+      );
+      let guildName = null;
+      if (guildRes.ok) {
+        const guildData = await guildRes.json();
+        guildName = guildData.name;
+      }
+
       // Update DB with permission status (reuse supabaseAdmin from above)
       await supabaseAdmin
         .from('discord_servers')
-        .update({ bot_permission_status: status })
+        .update({
+          bot_permission_status: status,
+          bot_installed: true,
+          ...(guildName ? { guild_name: guildName } : {})
+        })
         .eq('guild_id', guild_id)
         .eq('seller_id', user.id);
 

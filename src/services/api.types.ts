@@ -102,6 +102,7 @@ export interface ISellerApi {
   getStats(): Promise<SellerStats>;
   getAnnouncements(): Promise<Array<{ id: string; title: string; body: string; severity: string; startsAt: string; endsAt: string }>>;
   getDiscordSettings(): Promise<SellerDiscordSettings>;
+  saveDiscordSettings(settings: Partial<SellerDiscordSettings>): Promise<void>;
 
   getPlans(params?: { status?: string }): Promise<SellerPlan[]>;
   getPlanById(id: string): Promise<SellerPlan | null>;

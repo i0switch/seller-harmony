@@ -218,6 +218,23 @@ Deno.serve(async (req: Request) => {
 
         const initialStatus = discordIdentity ? 'active' : 'pending_discord';
 
+        // BUG-10 fix: Retrieve subscription to get current_period_end
+        let currentPeriodEnd: string | null = null;
+        if (session.subscription) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(
+              session.subscription as string,
+              undefined,
+              { stripeAccount: session.metadata?.stripe_account_id || undefined }
+            );
+            if (sub.current_period_end) {
+              currentPeriodEnd = new Date(sub.current_period_end * 1000).toISOString();
+            }
+          } catch (err) {
+            console.error('[stripe-webhook] Failed to retrieve subscription for current_period_end:', err);
+          }
+        }
+
         const { error: upsertError } = await supabaseAdmin.from('memberships').upsert(
           {
             buyer_id,
@@ -226,6 +243,7 @@ Deno.serve(async (req: Request) => {
             status: initialStatus,
             stripe_subscription_id: (session.subscription as string) || null,
             stripe_customer_id: (session.customer as string) || null,
+            current_period_end: currentPeriodEnd,
             entitlement_ends_at: null, // Reset if it was previously canceled
           },
           { onConflict: 'buyer_id,plan_id' }
@@ -251,13 +269,25 @@ Deno.serve(async (req: Request) => {
     } else if (event.type === 'invoice.payment_succeeded') {
       const invoice = event.data.object as Stripe.Invoice;
       if (invoice.subscription) {
+        // BUG-10 fix: Also update current_period_end on payment success
+        let periodEnd: string | null = null;
+        try {
+          const sub = await stripe.subscriptions.retrieve(invoice.subscription as string);
+          if (sub.current_period_end) {
+            periodEnd = new Date(sub.current_period_end * 1000).toISOString();
+          }
+        } catch (err) {
+          console.error('[stripe-webhook] Failed to retrieve subscription period_end:', err);
+        }
+
         // Recover status from grace_period to active upon successful payment
         await supabaseAdmin
           .from('memberships')
           .update({
             status: 'active',
             grace_period_started_at: null,
-            grace_period_ends_at: null
+            grace_period_ends_at: null,
+            ...(periodEnd ? { current_period_end: periodEnd } : {}),
           })
           .eq('stripe_subscription_id', invoice.subscription)
           .eq('status', 'grace_period');

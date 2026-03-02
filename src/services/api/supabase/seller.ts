@@ -167,6 +167,25 @@ export const sellerApi: ISellerApi = {
     };
   },
 
+  async saveDiscordSettings(settings: Partial<SellerDiscordSettings>): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (settings.guildId !== undefined) updates.guild_id = settings.guildId;
+    if (settings.botConnected !== undefined) updates.bot_installed = settings.botConnected;
+    if (settings.botHasManageRoles !== undefined) updates.bot_permission_status = settings.botHasManageRoles ? 'ok' : 'unknown';
+
+    const { error } = await supabase
+      .from("discord_servers")
+      .upsert(
+        { seller_id: user.id, ...updates },
+        { onConflict: 'seller_id,guild_id', ignoreDuplicates: false }
+      );
+
+    if (error) throw new Error(error.message);
+  },
+
   // ── Plans CRUD ─────────────────────────────────────────────────────
   async getPlans(params?): Promise<SellerPlan[]> {
     const { data: { user } } = await supabase.auth.getUser();

@@ -2,8 +2,13 @@
 import Stripe from 'npm:stripe@^14.0.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
 
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN');
+if (!ALLOWED_ORIGIN) {
+  console.error('ALLOWED_ORIGIN is not configured. CORS will reject all cross-origin requests.');
+}
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -46,6 +51,20 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // BUG-08 fix: Verify user has seller role before allowing Stripe onboarding
+    const { data: userData } = await supabaseClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!userData || (userData.role !== 'seller' && userData.role !== 'platform_admin')) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Only sellers can create Stripe accounts' }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

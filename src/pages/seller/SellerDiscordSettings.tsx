@@ -28,6 +28,7 @@ export default function SellerDiscordSettings() {
   const [verifyResult, setVerifyResult] = useState<DiscordVerificationEntry["checks"] | null>(null);
   const [verifyErrorCode, setVerifyErrorCode] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -38,6 +39,21 @@ export default function SellerDiscordSettings() {
       setLoading(false);
     });
   }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await sellerApi.saveDiscordSettings({
+        guildId,
+      });
+      toast({ title: "設定を保存しました" });
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "エラー", description: "設定の保存に失敗しました", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const runVerify = async () => {
     setVerifyStatus("checking");
@@ -187,7 +203,9 @@ export default function SellerDiscordSettings() {
 
       {/* Actions */}
       <div className="space-y-2">
-        <Button className="w-full" onClick={() => toast({ title: "設定を保存しました" })}>設定を保存</Button>
+        <Button className="w-full" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />保存中...</> : "設定を保存"}
+        </Button>
         <Button variant="outline" className="w-full">
           <ExternalLink className="h-4 w-4 mr-2" />Bot再招待リンクを生成
         </Button>

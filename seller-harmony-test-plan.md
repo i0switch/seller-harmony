@@ -1224,3 +1224,169 @@ active | past_due | canceled | unpaid | incomplete
 ```
 one_time | monthly | yearly
 ```
+
+---
+
+## 14. 本番リリース向け追加テスト項目（2025-07-16 追加）
+
+> **詳細ドキュメント**: [docs/production-readiness-tests.md](docs/production-readiness-tests.md)  
+> 既存 E2E テスト 145 件 ALL PASS を前提に、本番運用に追加で必要なテスト項目を以下にまとめる。
+
+### 14.1 発見済みバグ（BUG-07〜BUG-13）
+
+| バグ ID | 重要度 | 場所 | 概要 |
+|---------|--------|------|------|
+| BUG-07 | 🔴 Critical | `stripe-checkout` | 削除済み/無効プランで Checkout Session 作成可能 |
+| BUG-08 | 🔴 Critical | `stripe-onboarding` | セラーロールチェック未実装（バイヤーが Stripe アカウント作成可能） |
+| BUG-09 | 🟠 High | `discord-oauth` | 空文字 `discord_user_id` で UNIQUE 制約違反 |
+| BUG-10 | 🟠 High | `stripe-webhook` | `memberships.current_period_end` Webhook 処理時に未設定 |
+| BUG-11 | 🟠 High | `system_announcements` | buyer/seller 向け SELECT RLS ポリシー欠落 |
+| BUG-12 | 🟡 Medium | cron 未実装 | `grace_period` → `expired` 自動遷移なし |
+| BUG-13 | 🟠 High | 全 Edge Functions | `ALLOWED_ORIGIN` 未設定時に CORS `*` フォールバック |
+
+### 14.2 追加テストカテゴリ一覧
+
+| カテゴリ | テスト ID | 件数 | 優先度 |
+|---------|----------|------|--------|
+| Edge Function 統合テスト | EF-01〜EF-23 | 23 | 🔴 最優先 |
+| RLS セキュリティテスト | RLS-01〜RLS-10 | 10 | 🔴 最優先 |
+| DB スキーマ整合性テスト | DB-01〜DB-05 | 5 | 🟠 高 |
+| セキュリティテスト | SEC-01〜SEC-09 | 9 | 🔴 最優先 |
+| 認証済みユーザー UI テスト | UI-01〜UI-16 | 16 | 🟠 高 |
+| E2E 統合テスト | E2E-01〜E2E-06 | 6 | 🟠 高 |
+| 非機能テスト | NF-01〜NF-08 | 8 | 🟡 中 |
+| **合計** | — | **77** | — |
+
+### 14.3 Edge Function 統合テスト（EF-01〜EF-23）
+
+#### stripe-webhook（EF-01〜EF-11）
+
+| ID | テスト名 | 優先度 | 期待結果 |
+|----|---------|--------|---------|
+| EF-01 | `checkout.session.completed` 正常処理 | 🔴 | `memberships.status='active'` 作成 |
+| EF-02 | `customer.subscription.updated` 正常処理 | 🔴 | ステータス同期 |
+| EF-03 | `customer.subscription.deleted` 正常処理 | 🔴 | `status='canceled'`, `entitlement_ends_at` 設定 |
+| EF-04 | `invoice.payment_failed` 処理 | 🔴 | `status='past_due'`, `grace_period_ends_at` +3日 |
+| EF-05 | `invoice.payment_succeeded` 処理 | 🟠 | `status='active'`, `current_period_end` 更新 |
+| EF-06 | `charge.dispute.created` 処理 | 🟠 | `dispute_status='open'`, `risk_flag` 設定 |
+| EF-07 | `charge.refunded` 処理 | 🟠 | `status='refunded'`, `entitlement_ends_at=now()` |
+| EF-08 | Webhook 署名検証失敗 | 🔴 | HTTP 400, DB 記録なし |
+| EF-09 | 冪等性テスト（重複イベント） | 🟠 | 2回目は `skipped` |
+| EF-10 | `manual_override` 有効時スキップ | 🟡 | ステータス変更なし |
+| EF-11 | 削除済みプランのイベント処理 | 🟠 | エラーなし、ログ出力 |
+
+#### stripe-checkout（EF-12〜EF-15）
+
+| ID | テスト名 | 優先度 | 期待結果 |
+|----|---------|--------|---------|
+| EF-12 | Checkout Session 正常作成 | 🔴 | HTTP 200, Stripe Checkout URL 返却 |
+| EF-13 | 削除済みプラン拒否（BUG-07 修正確認） | 🔴 | HTTP 400/404 |
+| EF-14 | 未認証リクエスト拒否 | 🔴 | HTTP 401 |
+| EF-15 | Stripe アカウント未設定エラー | 🟠 | HTTP 400 + エラーメッセージ |
+
+#### stripe-onboarding（EF-16〜EF-17）
+
+| ID | テスト名 | 優先度 | 期待結果 |
+|----|---------|--------|---------|
+| EF-16 | オンボーディングリンク正常生成 | 🟠 | HTTP 200, AccountLink URL |
+| EF-17 | バイヤーロール拒否（BUG-08 修正確認） | 🔴 | HTTP 403 |
+
+#### discord-oauth（EF-18〜EF-21）
+
+| ID | テスト名 | 優先度 | 期待結果 |
+|----|---------|--------|---------|
+| EF-18 | OAuth 認可 URL 生成 | 🟠 | Discord OAuth URL リダイレクト |
+| EF-19 | OAuth コード交換フロー | 🟠 | `discord_identities` にレコード作成 |
+| EF-20 | state パラメータ CSRF 検証 | 🔴 | 不正 state で HTTP 400/403 |
+| EF-21 | リダイレクト URI ホワイトリスト検証 | 🟠 | 許可外 URI でエラー |
+
+#### discord-bot（EF-22〜EF-23）
+
+| ID | テスト名 | 優先度 | 期待結果 |
+|----|---------|--------|---------|
+| EF-22 | Bot 権限検証 | 🟠 | `has_permission: true/false` |
+| EF-23 | 非セラーロール拒否 | 🔴 | HTTP 403 |
+
+### 14.4 RLS セキュリティテスト（RLS-01〜RLS-10）
+
+| ID | テスト名 | 優先度 | 期待結果 |
+|----|---------|--------|---------|
+| RLS-01 | セラー A → セラー B の plans 読取不可 | 🔴 | 0 行返却 |
+| RLS-02 | セラー A → セラー B の memberships 読取不可 | 🔴 | 0 行返却 |
+| RLS-03 | バイヤー → plans INSERT 不可 | 🔴 | policy violation |
+| RLS-04 | バイヤー A → バイヤー B の memberships 読取不可 | 🔴 | 自分の分のみ |
+| RLS-05 | セラー A → セラー B の stripe_connected_accounts 読取不可 | 🔴 | 0 行返却 |
+| RLS-06 | discord_identities token 保護 | 🔴 | 他ユーザーのトークン不可視 |
+| RLS-07 | system_announcements buyer/seller SELECT（BUG-11） | 🟠 | `is_published=true` のみ |
+| RLS-08 | stripe_webhook_events セラー直接読取不可 | 🟠 | 0 行返却 |
+| RLS-09 | audit_logs 自分のログのみ | 🟡 | 自分関連のみ |
+| RLS-10 | role_assignments 直接操作不可 | 🟠 | INSERT エラー |
+
+### 14.5 DB スキーマ整合性テスト（DB-01〜DB-05）
+
+| ID | テスト名 | 優先度 |
+|----|---------|--------|
+| DB-01 | `memberships.current_period_end` NULL 許容確認 | 🟠 |
+| DB-02 | `discord_identities.discord_user_id` UNIQUE + 空文字チェック | 🟠 |
+| DB-03 | `role_assignments` テーブル使用状況 | 🟡 |
+| DB-04 | `audit_logs` カラム名整合性 | 🟡 |
+| DB-05 | `subscription_status` enum 値網羅性 | 🟠 |
+
+### 14.6 セキュリティテスト（SEC-01〜SEC-09）
+
+| ID | テスト名 | 優先度 |
+|----|---------|--------|
+| SEC-01 | CORS ワイルドカード排除（BUG-13） | 🔴 |
+| SEC-02 | Discord OAuth redirect_uri localhost 排除 | 🔴 |
+| SEC-03 | XSS 全パス検証 | 🟠 |
+| SEC-04 | Rate Limiting | 🟠 |
+| SEC-05 | stripe-onboarding セラーロールチェック（BUG-08） | 🔴 |
+| SEC-06 | JWT 有効期限切れ拒否 | 🟠 |
+| SEC-07 | Supabase anon key 適切使用 | 🟡 |
+| SEC-08 | localStorage 改ざん耐性 | 🟠 |
+| SEC-09 | SQL Injection 耐性 | 🔴 |
+
+### 14.7 認証済みユーザー UI テスト（UI-01〜UI-16）
+
+| ID | テスト名 | 優先度 | 対象ルート |
+|----|---------|--------|----------|
+| UI-01 | プラン作成 | 🟠 | `/seller/plans/new` |
+| UI-02 | プラン編集 | 🟠 | `/seller/plans/:id` |
+| UI-03 | プラン削除 | 🟠 | `/seller/plans/:id` |
+| UI-04 | メンバー一覧 | 🟡 | `/seller/members` |
+| UI-05 | メンバー詳細 | 🟡 | `/seller/members/:id` |
+| UI-06 | クロスチェック | 🟡 | `/seller/crosscheck` |
+| UI-07 | ダッシュボード KPI | 🟡 | `/seller/dashboard` |
+| UI-08 | Discord 設定 | 🟡 | `/seller/settings/discord` |
+| UI-09 | テナント一覧・詳細 | 🟠 | `/platform/tenants` |
+| UI-10 | Webhook イベント一覧 | 🟠 | `/platform/webhooks` |
+| UI-11 | リトライキュー管理 | 🟠 | `/platform/retry-queue` |
+| UI-12 | お知らせ管理 | 🟡 | `/platform/announcements` |
+| UI-13 | システム制御 | 🟡 | `/platform/system-control` |
+| UI-14 | プラットフォームダッシュボード | 🟠 | `/platform/dashboard` |
+| UI-15 | バイヤーマイページ | 🟠 | `/member/me` |
+| UI-16 | Discord 連携確認 | 🟠 | `/buyer/discord/confirm` |
+
+### 14.8 E2E 統合テスト（E2E-01〜E2E-06）
+
+| ID | テスト名 | 優先度 | フロー |
+|----|---------|--------|--------|
+| E2E-01 | フル購入フロー（サブスク） | 🔴 | プラン作成→Checkout→Webhook→membership active |
+| E2E-02 | フル購入+Discord ロール付与 | 🔴 | E2E-01 + Discord OAuth + ロール付与 |
+| E2E-03 | キャンセルフロー | 🟠 | subscription.deleted→canceled→ロール剥奪 |
+| E2E-04 | 決済失敗→リカバリ | 🟠 | payment_failed→grace_period→recovery |
+| E2E-05 | 返金フロー | 🟠 | charge.refunded→refunded→ロール剥奪 |
+| E2E-06 | チャージバック | 🟡 | dispute.created→dispute_status='open' |
+
+### 14.9 非機能テスト（NF-01〜NF-08）
+
+| ID | テスト名 | 優先度 |
+|----|---------|--------|
+| NF-01 | grace_period 期限切れ自動遷移 | 🟠 |
+| NF-02 | Webhook 失敗リトライ | 🟠 |
+| NF-03 | FastAPI 認証ミドルウェア | 🟡 |
+| NF-04 | 環境変数完全性チェック | 🟠 |
+| NF-05 | Edge Function タイムアウト耐性 | 🟡 |
+| NF-06 | DB インデックス最適性 | 🟡 |
+| NF-07 | Stripe API バージョン互換性 | 🟡 |
+| NF-08 | エラーログ・監視設定 | 🟡 |

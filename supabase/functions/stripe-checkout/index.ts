@@ -2,8 +2,13 @@
 import Stripe from 'npm:stripe@^14.0.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
 
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN');
+if (!ALLOWED_ORIGIN) {
+  console.error('ALLOWED_ORIGIN is not configured. CORS will reject all cross-origin requests.');
+}
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://preview--member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
@@ -45,14 +50,23 @@ Deno.serve(async (req: Request) => {
     const { plan_id } = await req.json();
     if (!plan_id) throw new Error("plan_id is required");
 
-    // Use user client for plan query (respects RLS: only public plans visible)
-    const { data: plan } = await supabaseClient
+    // Use admin client for plan query to check deleted_at and is_active
+    const { data: plan } = await supabaseAdmin
       .from('plans')
       .select('*')
       .eq('id', plan_id)
+      .is('deleted_at', null)
       .single();
 
     if (!plan) throw new Error("Plan not found");
+
+    // BUG-07 fix: Reject deleted or inactive plans
+    if (plan.is_active === false) {
+      return new Response(JSON.stringify({ error: 'This plan is no longer available' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Use admin client for internal data (seller_profiles and stripe accounts)
     const { data: sellerProfile } = await supabaseAdmin
