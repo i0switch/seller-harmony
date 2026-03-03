@@ -28,7 +28,7 @@ export const buyerApi: IBuyerApi = {
     const sellerIds = [...new Set(memberships.map(m => m.seller_id))];
     const discordServerIds = [...new Set(
       memberships
-        .map(m => (m.plans as any)?.discord_server_id)
+        .map(m => (m.plans as { discord_server_id?: string } | null)?.discord_server_id)
         .filter(Boolean)
     )];
 
@@ -42,9 +42,9 @@ export const buyerApi: IBuyerApi = {
     // Batch fetch discord servers
     const { data: servers } = discordServerIds.length > 0
       ? await supabase
-          .from("discord_servers")
-          .select("id, guild_name")
-          .in("id", discordServerIds)
+        .from("discord_servers")
+        .select("id, guild_name")
+        .in("id", discordServerIds)
       : { data: [] };
     const serverMap = new Map((servers || []).map(s => [s.id, s.guild_name]));
 
@@ -56,7 +56,7 @@ export const buyerApi: IBuyerApi = {
       .maybeSingle();
 
     return memberships.map(m => {
-      const plan = m.plans as any;
+      const plan = m.plans as { name?: string; price?: number; currency?: string; interval?: string; discord_server_id?: string } | null;
       const discordServerId = plan?.discord_server_id;
 
       // Determine Discord link status
@@ -89,7 +89,9 @@ export const buyerApi: IBuyerApi = {
         roleName: "",  // Would need Discord API call to resolve
         guildName: serverMap.get(discordServerId) || "",
         nextBillingDate: plan?.interval !== "one_time"
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+          ? (m.current_period_end
+              ? new Date(m.current_period_end).toISOString().split("T")[0]
+              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
           : null,
         purchasedAt: m.created_at,
         expiresAt: m.entitlement_ends_at,

@@ -1,6 +1,6 @@
 import { Link, Outlet, useLocation, Navigate, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Webhook, RefreshCw, Megaphone, Settings, LogOut, Menu, X,
+  LayoutDashboard, Users, Webhook, RefreshCw, Megaphone, Settings, LogOut, Menu, X, Loader2,
 } from "lucide-react";
 import { useState } from "react";
 import { usePlatformAuth } from "@/hooks/useRouteGuard";
@@ -17,13 +17,22 @@ const navItems = [
 export default function PlatformLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { isLoggedIn, logout } = usePlatformAuth();
+  const { isLoggedIn, isLoading, logout } = usePlatformAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     await logout();
     navigate("/platform/login", { replace: true });
   };
+
+  // BUG-B01 fix: Wait for auth initialization before redirecting
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   // Route guard: redirect to login if not authenticated
   if (!isLoggedIn) {

@@ -175,7 +175,7 @@ Deno.serve(async (req: Request) => {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('Webhook signature verification failed:', errorMsg);
     return new Response(
-      JSON.stringify({ error: `Signature verification failed: ${errorMsg}` }),
+      JSON.stringify({ error: 'Signature verification failed' }),
       { status: 400 }
     );
   }
@@ -243,6 +243,7 @@ Deno.serve(async (req: Request) => {
             status: initialStatus,
             stripe_subscription_id: (session.subscription as string) || null,
             stripe_customer_id: (session.customer as string) || null,
+            stripe_checkout_session_id: session.id, // BUG-A03 fix: save session_id for CheckoutSuccess lookup
             current_period_end: currentPeriodEnd,
             entitlement_ends_at: null, // Reset if it was previously canceled
           },
@@ -270,9 +271,31 @@ Deno.serve(async (req: Request) => {
       const invoice = event.data.object as Stripe.Invoice;
       if (invoice.subscription) {
         // BUG-10 fix: Also update current_period_end on payment success
+        // Resolve the Connect account for this subscription
         let periodEnd: string | null = null;
         try {
-          const sub = await stripe.subscriptions.retrieve(invoice.subscription as string);
+          // Find the membership to get the seller's stripe account
+          const { data: mem } = await supabaseAdmin
+            .from('memberships')
+            .select('seller_id')
+            .eq('stripe_subscription_id', invoice.subscription)
+            .maybeSingle();
+
+          let stripeAccountId: string | undefined;
+          if (mem?.seller_id) {
+            const { data: acct } = await supabaseAdmin
+              .from('stripe_connected_accounts')
+              .select('stripe_account_id')
+              .eq('seller_id', mem.seller_id)
+              .single();
+            stripeAccountId = acct?.stripe_account_id;
+          }
+
+          const sub = await stripe.subscriptions.retrieve(
+            invoice.subscription as string,
+            undefined,
+            stripeAccountId ? { stripeAccount: stripeAccountId } : undefined
+          );
           if (sub.current_period_end) {
             periodEnd = new Date(sub.current_period_end * 1000).toISOString();
           }
@@ -330,6 +353,7 @@ Deno.serve(async (req: Request) => {
             final_payment_failure_at: now
           })
           .eq('stripe_subscription_id', invoice.subscription)
+          .in('status', ['grace_period', 'active'])
           .select('buyer_id, seller_id, plan_id, manual_override')
           .maybeSingle();
 
@@ -364,13 +388,16 @@ Deno.serve(async (req: Request) => {
           subscription_id: sub.id,
           period_end: new Date(sub.current_period_end * 1000).toISOString(),
         }, event.id);
-      } else if (sub.status === 'active') {
-        // Full recovery or state sync
+      } else if (sub.status === 'active' && !sub.cancel_at_period_end) {
+        // Recovery: cancel_scheduled → active (user re-activated) or state sync
         await supabaseAdmin
           .from('memberships')
-          .update({ status: 'active' })
+          .update({
+            status: 'active',
+            revoke_scheduled_at: null,
+          })
           .eq('stripe_subscription_id', sub.id)
-          .not('status', 'in', '("cancel_scheduled")');
+          .in('status', ['cancel_scheduled', 'grace_period']);
       }
     } else if (event.type === 'customer.subscription.deleted') {
       const sub = event.data.object as Stripe.Subscription;
@@ -412,21 +439,77 @@ Deno.serve(async (req: Request) => {
       // ─── Handle charge.refunded → transition to refunded ───
       const charge = event.data.object as Stripe.Charge;
       const invoiceId = charge.invoice as string | null;
+
+      // Helper to find the Connect account for Stripe API calls
+      const findStripeAccount = async (sellerId: string): Promise<string | undefined> => {
+        const { data } = await supabaseAdmin
+          .from('stripe_connected_accounts')
+          .select('stripe_account_id')
+          .eq('seller_id', sellerId)
+          .single();
+        return data?.stripe_account_id;
+      };
+
       if (invoiceId) {
-        // Retrieve the invoice to find the subscription
-        const invoice = await stripe.invoices.retrieve(invoiceId);
-        if (invoice.subscription) {
+        // Subscription-based refund: find membership via invoice -> subscription
+        try {
+          // Try to find membership first to get the Connect account
+          const { data: memByCharge } = await supabaseAdmin
+            .from('memberships')
+            .select('seller_id, stripe_subscription_id')
+            .eq('stripe_customer_id', charge.customer as string)
+            .maybeSingle();
+
+          const stripeAcct = memByCharge?.seller_id ? await findStripeAccount(memByCharge.seller_id) : undefined;
+          const invoice = await stripe.invoices.retrieve(invoiceId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+
+          if (invoice.subscription) {
+            const { data: membership } = await supabaseAdmin
+              .from('memberships')
+              .select('buyer_id, seller_id, plan_id, manual_override')
+              .eq('stripe_subscription_id', invoice.subscription)
+              .single();
+
+            if (membership) {
+              await supabaseAdmin
+                .from('memberships')
+                .update({ status: 'refunded' })
+                .eq('stripe_subscription_id', invoice.subscription);
+
+              if (!membership.manual_override) {
+                await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+              }
+
+              await writeAuditLog('refund', {
+                entity: 'membership',
+                buyer_id: membership.buyer_id,
+                plan_id: membership.plan_id,
+                charge_id: charge.id,
+              }, event.id);
+            }
+          }
+        } catch (err) {
+          console.error('[stripe-webhook] Error processing subscription refund:', err);
+        }
+      } else {
+        // One-time payment refund: find membership via charge metadata or customer
+        const metadata = charge.metadata || {};
+        const { buyer_id, plan_id, seller_id } = metadata;
+
+        if (buyer_id && plan_id) {
           const { data: membership } = await supabaseAdmin
             .from('memberships')
             .select('buyer_id, seller_id, plan_id, manual_override')
-            .eq('stripe_subscription_id', invoice.subscription)
-            .single();
+            .eq('buyer_id', buyer_id)
+            .eq('plan_id', plan_id)
+            .maybeSingle();
 
           if (membership) {
             await supabaseAdmin
               .from('memberships')
               .update({ status: 'refunded' })
-              .eq('stripe_subscription_id', invoice.subscription);
+              .eq('buyer_id', buyer_id)
+              .eq('plan_id', plan_id);
 
             if (!membership.manual_override) {
               await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
@@ -437,6 +520,7 @@ Deno.serve(async (req: Request) => {
               buyer_id: membership.buyer_id,
               plan_id: membership.plan_id,
               charge_id: charge.id,
+              type: 'one_time',
             }, event.id);
           }
         }
@@ -446,27 +530,93 @@ Deno.serve(async (req: Request) => {
       const dispute = event.data.object as Stripe.Dispute;
       const chargeId = dispute.charge as string;
       if (chargeId) {
-        const charge = await stripe.charges.retrieve(chargeId);
-        const invoiceId = charge.invoice as string | null;
-        if (invoiceId) {
-          const invoice = await stripe.invoices.retrieve(invoiceId);
-          if (invoice.subscription) {
-            await supabaseAdmin
-              .from('memberships')
-              .update({
-                risk_flag: true,
-                dispute_status: dispute.status,
-              })
-              .eq('stripe_subscription_id', invoice.subscription);
+        // Find membership via subscription metadata
+        const { data: memberships } = await supabaseAdmin
+          .from('memberships')
+          .select('id, stripe_subscription_id, seller_id')
+          .eq('stripe_customer_id', dispute.metadata?.customer || '')
+          .limit(5);
 
-            await writeAuditLog('update', {
-              entity: 'membership',
-              action_detail: 'dispute_created',
-              dispute_id: dispute.id,
-              dispute_status: dispute.status,
-            }, event.id);
+        // Try to find the relevant membership via charge -> invoice -> subscription chain
+        let targetSubId: string | null = null;
+        try {
+          // Find seller Connect account for API calls
+          const sellerMem = memberships?.[0];
+          let stripeAcct: string | undefined;
+          if (sellerMem?.seller_id) {
+            const { data: acct } = await supabaseAdmin
+              .from('stripe_connected_accounts')
+              .select('stripe_account_id')
+              .eq('seller_id', sellerMem.seller_id)
+              .single();
+            stripeAcct = acct?.stripe_account_id;
           }
+
+          const charge = await stripe.charges.retrieve(chargeId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+          const invoiceId = charge.invoice as string | null;
+          if (invoiceId) {
+            const invoice = await stripe.invoices.retrieve(invoiceId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+            targetSubId = invoice.subscription as string | null;
+          }
+        } catch (err) {
+          console.error('[stripe-webhook] Error resolving dispute charge:', err);
         }
+
+        if (targetSubId) {
+          await supabaseAdmin
+            .from('memberships')
+            .update({
+              risk_flag: true,
+              dispute_status: dispute.status,
+            })
+            .eq('stripe_subscription_id', targetSubId);
+
+          await writeAuditLog('update', {
+            entity: 'membership',
+            action_detail: 'dispute_created',
+            dispute_id: dispute.id,
+            dispute_status: dispute.status,
+          }, event.id);
+        }
+      }
+    } else if (event.type === 'charge.dispute.closed') {
+      // ─── Handle charge.dispute.closed → update dispute_status ───
+      const dispute = event.data.object as Stripe.Dispute;
+      const chargeId = dispute.charge as string;
+      if (chargeId) {
+        // Update dispute_status; risk_flag stays true for manual review
+        // Find via same approach as dispute.created
+        try {
+          const { data: allMemberships } = await supabaseAdmin
+            .from('memberships')
+            .select('stripe_subscription_id, seller_id')
+            .eq('risk_flag', true)
+            .limit(50);
+
+          // Try each to find the right one
+          for (const mem of allMemberships || []) {
+            if (mem.stripe_subscription_id) {
+              await supabaseAdmin
+                .from('memberships')
+                .update({
+                  dispute_status: dispute.status,
+                  // Clear risk_flag only if dispute was won
+                  ...(dispute.status === 'won' ? { risk_flag: false } : {}),
+                })
+                .eq('stripe_subscription_id', mem.stripe_subscription_id)
+                .eq('risk_flag', true);
+            }
+          }
+        } catch (err) {
+          console.error('[stripe-webhook] Error processing dispute.closed:', err);
+        }
+
+        await writeAuditLog('update', {
+          entity: 'membership',
+          action_detail: 'dispute_closed',
+          dispute_id: dispute.id,
+          dispute_status: dispute.status,
+        }, event.id);
       }
     }
 

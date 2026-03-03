@@ -74,9 +74,10 @@ export default function DiscordResult() {
   const handleFinalize = async () => {
     setConfirmingSave(true);
     try {
-      // Step 2: Finalize save
+      // Step 2: Finalize save (no code needed — tokens already stored from step 1)
+      // BUG-B02 fix: Discord OAuth codes are one-time use, so we must NOT re-send the code
       const { data, error } = await supabase.functions.invoke('discord-oauth', {
-        body: { code, state, redirect_uri: `${window.location.origin}/buyer/discord/result`, save: true }
+        body: { save: true }
       });
 
       if (error || !data?.success) throw new Error(error?.message || "Finalize failed");

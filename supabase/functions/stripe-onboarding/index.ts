@@ -10,6 +10,7 @@ if (!ALLOWED_ORIGIN) {
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
@@ -17,11 +18,24 @@ const stripe = new Stripe(STRIPE_SECRET_KEY, {
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-function getOrigin(req: Request) {
+// Security: Validate origin against allowlist to prevent open redirect
+const ALLOWED_ORIGINS = [
+  ALLOWED_ORIGIN,
+  'https://member-bridge-flow.lovable.app',
+].filter(Boolean) as string[];
+
+function getOrigin(req: Request): string {
   const origin = req.headers.get('origin') || req.headers.get('referer');
   if (origin) {
-    const url = new URL(origin);
-    return `${url.protocol}//${url.host}`;
+    try {
+      const url = new URL(origin);
+      const candidate = `${url.protocol}//${url.host}`;
+      if (ALLOWED_ORIGINS.includes(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // Invalid URL — fall through to default
+    }
   }
   return ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app';
 }
@@ -116,7 +130,7 @@ Deno.serve(async (req: Request) => {
   } catch (error: unknown) {
     console.error('stripe-onboarding error:', error instanceof Error ? error.message : String(error));
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 400,
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

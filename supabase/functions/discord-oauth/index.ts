@@ -9,6 +9,7 @@ if (!ALLOWED_ORIGIN) {
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 const DISCORD_CLIENT_ID = Deno.env.get('DISCORD_CLIENT_ID') || '';
@@ -98,6 +99,47 @@ Deno.serve(async (req: Request) => {
     }
 
     const actualCode = code || body.code;
+    const shouldSave = body.save !== false;
+
+    // ── BUG-B02 fix: Finalize path (save=true without code) ──
+    // Discord OAuth codes are one-time use. The 2-step confirmation flow
+    // (step 1: exchange code & show user info, step 2: user confirms & save)
+    // must NOT re-exchange the code. Instead, tokens are stored on step 1
+    // and step 2 only activates memberships using the stored identity.
+    if (shouldSave && !actualCode) {
+      const { data: existingIdentity } = await supabaseAdmin
+        .from('discord_identities')
+        .select('discord_user_id, discord_username')
+        .eq('user_id', user.id)
+        .not('discord_user_id', 'is', null)
+        .maybeSingle();
+
+      if (!existingIdentity?.discord_user_id) {
+        return new Response(JSON.stringify({ error: 'Discord連携情報が見つかりません。もう一度連携をやり直してください。' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Activate pending_discord memberships
+      await supabaseAdmin
+        .from('memberships')
+        .update({ status: 'active' })
+        .eq('buyer_id', user.id)
+        .eq('status', 'pending_discord');
+
+      // Clear oauth_state (finalized)
+      await supabaseAdmin
+        .from('discord_identities')
+        .update({ oauth_state: null, oauth_state_created_at: null })
+        .eq('user_id', user.id);
+
+      return new Response(JSON.stringify({ success: true, saved: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── Code exchange path: requires state verification ──
     if (!state) {
       throw new Error("State parameter is required for callback validation.");
     }
@@ -127,8 +169,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const shouldSave = body.save !== false;
-
     // Exchange code for token
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
@@ -153,25 +193,27 @@ Deno.serve(async (req: Request) => {
     });
     const meData = await meResponse.json();
 
+    // BUG-09 fix: Validate discord_user_id is not empty to prevent UNIQUE constraint violation
+    if (!meData.id || String(meData.id).trim() === '') {
+      throw new Error('Discord API returned an empty user ID. Please try again.');
+    }
+
+    // BUG-B02 fix: Always save tokens after code exchange (code is one-time use)
+    // When save=false (step 1), store tokens but keep oauth_state for verification.
+    // When save=true (single-step flow), clear oauth_state immediately.
+    await supabaseAdmin.from('discord_identities').upsert({
+      user_id: user.id,
+      discord_user_id: meData.id,
+      discord_username: `${meData.username}${meData.discriminator !== '0' ? `#${meData.discriminator}` : ''}`,
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+      ...(shouldSave
+        ? { oauth_state: null, oauth_state_created_at: null }
+        : {}),
+    }, { onConflict: 'user_id' });
+
     if (shouldSave) {
-      // BUG-09 fix: Validate discord_user_id is not empty to prevent UNIQUE constraint violation
-      if (!meData.id || String(meData.id).trim() === '') {
-        throw new Error('Discord API returned an empty user ID. Please try again.');
-      }
-
-      // Upsert discord identity (use service role to bypass RLS for upsert)
-      // Clear oauth_state after successful use (one-time use)
-      await supabaseAdmin.from('discord_identities').upsert({
-        user_id: user.id,
-        discord_user_id: meData.id,
-        discord_username: `${meData.username}${meData.discriminator !== '0' ? `#${meData.discriminator}` : ''}`,
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-        oauth_state: null,
-        oauth_state_created_at: null,
-      }, { onConflict: 'user_id' });
-
       // Activate any pending_discord memberships for this buyer
       await supabaseAdmin
         .from('memberships')

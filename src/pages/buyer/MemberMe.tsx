@@ -257,6 +257,16 @@ export default function MemberMe() {
               const { data: { user } } = await supabase.auth.getUser();
               if (!user) throw new Error("ユーザー情報を取得できません");
 
+              // BUG-B06 fix: Cancel Stripe subscriptions before DB update
+              // This prevents webhooks from reactivating memberships
+              try {
+                await supabase.functions.invoke('stripe-checkout', {
+                  body: { action: 'cancel_all_subscriptions' }
+                });
+              } catch (stripeErr) {
+                console.error('Stripe cancellation failed (continuing with deletion):', stripeErr);
+              }
+
               // Mark all active memberships as canceled
               await supabase
                 .from("memberships")
