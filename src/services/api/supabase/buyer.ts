@@ -16,7 +16,8 @@ export const buyerApi: IBuyerApi = {
         plans:plan_id (
           name, price, currency, interval,
           discord_server_id
-        )
+        ),
+        role_assignments(actual_state)
       `)
       .eq("buyer_id", user.id)
       .order("created_at", { ascending: false });
@@ -58,6 +59,7 @@ export const buyerApi: IBuyerApi = {
     return memberships.map(m => {
       const plan = m.plans as { name?: string; price?: number; currency?: string; interval?: string; discord_server_id?: string } | null;
       const discordServerId = plan?.discord_server_id;
+      const roleAssignment = (m.role_assignments as any)?.[0];
 
       // Determine Discord link status
       let discordLinkStatus: DiscordLinkStatus = "not_linked";
@@ -67,11 +69,20 @@ export const buyerApi: IBuyerApi = {
         discordUsername = discordIdentity.discord_username || "";
       }
 
-      // Determine role status based on membership status
+      // CAND-P1-02: Determine role status based on role_assignments actual_state
+      // This is the source of truth, avoiding incorrect assumptions.
       let roleStatus: RoleStatus = "pending";
-      if (m.status === "active" && discordLinkStatus === "linked") {
-        roleStatus = "granted";
-      } else if (m.status === "canceled" || m.status === "expired" || m.status === "refunded") {
+      if (!discordIdentity) {
+        roleStatus = "pending"; // Waiting for user to link Discord
+      } else if (roleAssignment) {
+        const state = roleAssignment.actual_state;
+        if (state === "granted") roleStatus = "granted";
+        else if (state === "failed") roleStatus = "failed";
+        else if (state === "revoked") roleStatus = "revoked";
+        else if (state === "revoke_failed") roleStatus = "failed";
+      } else if (m.status === "active") {
+        roleStatus = "pending"; // Provisioning in progress or needs retry
+      } else if (["canceled", "expired", "refunded"].includes(m.status)) {
         roleStatus = "revoked";
       }
 
@@ -90,8 +101,8 @@ export const buyerApi: IBuyerApi = {
         guildName: serverMap.get(discordServerId) || "",
         nextBillingDate: plan?.interval !== "one_time"
           ? (m.current_period_end
-              ? new Date(m.current_period_end).toISOString().split("T")[0]
-              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
+            ? new Date(m.current_period_end).toISOString().split("T")[0]
+            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
           : null,
         purchasedAt: m.created_at,
         expiresAt: m.entitlement_ends_at,

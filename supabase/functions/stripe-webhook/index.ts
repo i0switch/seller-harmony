@@ -41,29 +41,28 @@ const supabaseAdmin = createClient(
 
 /**
  * Assign a Discord role to a buyer after successful payment.
- * Errors are caught and logged — they do not break the webhook response.
  */
-async function assignDiscordRole(userId: string, sellerId: string, planId: string) {
+async function assignDiscordRole(membershipId: string, userId: string, sellerId: string, planId: string) {
   try {
     const { data: identity } = await supabaseAdmin
       .from('discord_identities')
-      .select('*')
+      .select('discord_user_id')
       .eq('user_id', userId)
       .single();
 
     const { data: server } = await supabaseAdmin
       .from('discord_servers')
-      .select('*')
+      .select('guild_id')
       .eq('seller_id', sellerId)
       .single();
 
     const { data: plan } = await supabaseAdmin
       .from('plans')
-      .select('*')
+      .select('discord_role_id')
       .eq('id', planId)
       .single();
 
-    if (identity && server && plan?.discord_role_id) {
+    if (identity?.discord_user_id && server?.guild_id && plan?.discord_role_id) {
       const res = await fetch(
         `https://discord.com/api/v10/guilds/${server.guild_id}/members/${identity.discord_user_id}/roles/${plan.discord_role_id}`,
         {
@@ -71,8 +70,21 @@ async function assignDiscordRole(userId: string, sellerId: string, planId: strin
           headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
         }
       );
+
+      const status = res.ok ? 'granted' : 'failed';
+      const reason = res.ok ? null : await res.text();
+
+      await supabaseAdmin.from('role_assignments').upsert({
+        membership_id: membershipId,
+        discord_user_id: identity.discord_user_id,
+        guild_id: server.guild_id,
+        role_id: plan.discord_role_id,
+        actual_state: status,
+        error_reason: reason,
+      }, { onConflict: 'membership_id' });
+
       if (!res.ok) {
-        console.error(`Discord role assignment failed: ${res.status} ${await res.text()}`);
+        console.error(`Discord role assignment failed: ${res.status} ${reason}`);
       }
     }
   } catch (err) {
@@ -82,29 +94,28 @@ async function assignDiscordRole(userId: string, sellerId: string, planId: strin
 
 /**
  * Remove a Discord role from a buyer when a subscription is canceled/expired.
- * Implements Conflict Check: If the user has another ACTIVE membership that grants the SAME role, do not remove it.
  */
-async function removeDiscordRole(userId: string, sellerId: string, planId: string) {
+async function removeDiscordRole(membershipId: string, userId: string, sellerId: string, planId: string) {
   try {
     const { data: identity } = await supabaseAdmin
       .from('discord_identities')
-      .select('*')
+      .select('discord_user_id')
       .eq('user_id', userId)
       .single();
 
     const { data: server } = await supabaseAdmin
       .from('discord_servers')
-      .select('*')
+      .select('guild_id')
       .eq('seller_id', sellerId)
       .single();
 
     const { data: plan } = await supabaseAdmin
       .from('plans')
-      .select('*')
+      .select('discord_role_id')
       .eq('id', planId)
       .single();
 
-    if (identity && server && plan?.discord_role_id) {
+    if (identity?.discord_user_id && server?.guild_id && plan?.discord_role_id) {
       // Conflict check: Does the user have another active membership granting the SAME role?
       const { data: activeMemberships } = await supabaseAdmin
         .from('memberships')
@@ -132,8 +143,21 @@ async function removeDiscordRole(userId: string, sellerId: string, planId: strin
             headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
           }
         );
+
+        const status = res.ok ? 'revoked' : 'revoke_failed';
+        const reason = res.ok ? null : await res.text();
+
+        await supabaseAdmin.from('role_assignments').upsert({
+          membership_id: membershipId,
+          discord_user_id: identity.discord_user_id,
+          guild_id: server.guild_id,
+          role_id: plan.discord_role_id,
+          actual_state: status as any,
+          error_reason: reason,
+        }, { onConflict: 'membership_id' });
+
         if (!res.ok) {
-          console.error(`Discord role removal failed: ${res.status} ${await res.text()}`);
+          console.error(`Discord role removal failed: ${res.status} ${reason}`);
         }
       } else {
         console.log('Skipped removing role due to another active membership.');
@@ -244,37 +268,114 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        const { error: upsertError } = await supabaseAdmin.from('memberships').upsert(
-          {
+        // C04 fix: Prevent overwriting existing active subscriptions on duplicate checkout
+        const { data: existingMembership } = await supabaseAdmin
+          .from('memberships')
+          .select('id, status, stripe_subscription_id')
+          .eq('buyer_id', buyer_id)
+          .eq('plan_id', plan_id)
+          .maybeSingle();
+
+        if (existingMembership) {
+          if (['active', 'grace_period', 'pending_discord', 'cancel_scheduled'].includes(existingMembership.status)) {
+            // DUPLICATE DETECTED
+            console.warn(`[C04] Duplicate checkout detected for buyer ${buyer_id} plan ${plan_id}. Canceling new subscription.`);
+
+            if (session.subscription) {
+              try {
+                await stripe.subscriptions.cancel(session.subscription as string, {
+                  stripeAccount: session.metadata?.stripe_account_id || undefined
+                });
+                console.log(`[C04] Duplicated subscription canceled: ${session.subscription}`);
+
+                // Also refund the latest charge/invoice
+                if (session.invoice) {
+                  const invoice = await stripe.invoices.retrieve(
+                    session.invoice as string,
+                    { stripeAccount: session.metadata?.stripe_account_id || undefined }
+                  );
+                  if (invoice.charge) {
+                    await stripe.refunds.create({
+                      charge: invoice.charge as string,
+                      reason: 'duplicate',
+                    }, { stripeAccount: session.metadata?.stripe_account_id || undefined });
+                    console.log(`[C04] Duplicated checkout charge refunded: ${invoice.charge}`);
+                  }
+                }
+              } catch (err) {
+                console.error('[C04] Failed to cancel/refund duplicate subscription:', err);
+              }
+            }
+
+            await writeAuditLog('duplicate_checkout_prevented', {
+              entity: 'membership',
+              buyer_id,
+              plan_id,
+              canceled_subscription: session.subscription,
+            }, event.id);
+
+            // Skip further processing
+          } else {
+            // Re-subscription: update existing row safely
+            const { error: updateError } = await supabaseAdmin.from('memberships').update({
+              seller_id, // ensure seller_id is up-to-date
+              status: initialStatus,
+              stripe_subscription_id: (session.subscription as string) || null,
+              stripe_customer_id: (session.customer as string) || null,
+              stripe_checkout_session_id: session.id, // BUG-A03 fix
+              current_period_end: currentPeriodEnd,
+              entitlement_ends_at: null, // Reset if it was previously canceled
+            }).eq('id', existingMembership.id);
+
+            if (updateError) {
+              console.error('[stripe-webhook] membership update error:', updateError);
+              throw new Error(`Membership update failed: ${updateError.message}`);
+            }
+
+            if (discordIdentity) {
+              await assignDiscordRole(existingMembership.id, buyer_id, seller_id, plan_id);
+            }
+
+            await writeAuditLog('update', {
+              entity: 'membership',
+              action_detail: 'resubscribed',
+              buyer_id,
+              plan_id,
+              seller_id,
+              status: initialStatus,
+            }, event.id);
+          }
+        } else {
+          // New subscription
+          const { data: newMembership, error: insertError } = await supabaseAdmin.from('memberships').insert({
             buyer_id,
             plan_id,
             seller_id,
             status: initialStatus,
             stripe_subscription_id: (session.subscription as string) || null,
             stripe_customer_id: (session.customer as string) || null,
-            stripe_checkout_session_id: session.id, // BUG-A03 fix: save session_id for CheckoutSuccess lookup
+            stripe_checkout_session_id: session.id, // BUG-A03 fix
             current_period_end: currentPeriodEnd,
             entitlement_ends_at: null, // Reset if it was previously canceled
-          },
-          { onConflict: 'buyer_id,plan_id' }
-        );
+          }).select('id').single();
 
-        if (upsertError) {
-          console.error('[stripe-webhook] membership upsert error:', upsertError);
-          throw new Error(`Membership upsert failed: ${upsertError.message}`);
+          if (insertError) {
+            console.error('[stripe-webhook] membership insert error:', insertError);
+            throw new Error(`Membership insert failed: ${insertError.message}`);
+          }
+
+          if (discordIdentity && newMembership) {
+            await assignDiscordRole(newMembership.id, buyer_id, seller_id, plan_id);
+          }
+
+          await writeAuditLog('create', {
+            entity: 'membership',
+            buyer_id,
+            plan_id,
+            seller_id,
+            status: initialStatus,
+          }, event.id);
         }
-
-        if (discordIdentity) {
-          await assignDiscordRole(buyer_id, seller_id, plan_id);
-        }
-
-        await writeAuditLog('create', {
-          entity: 'membership',
-          buyer_id,
-          plan_id,
-          seller_id,
-          status: initialStatus,
-        }, event.id);
       }
     } else if (event.type === 'invoice.payment_succeeded') {
       const invoice = event.data.object as Stripe.Invoice;
@@ -317,22 +418,31 @@ Deno.serve(async (req: Request) => {
           console.error('[stripe-webhook] Failed to retrieve subscription period_end:', err);
         }
 
-        // Recover status from grace_period to active upon successful payment
-        await supabaseAdmin
+        // C02 fix: Recover status from grace_period or payment_failed to active upon successful payment
+        const { data: recoveredMemberships } = await supabaseAdmin
           .from('memberships')
           .update({
             status: 'active',
             grace_period_started_at: null,
             grace_period_ends_at: null,
+            final_payment_failure_at: null,
             ...(periodEnd ? { current_period_end: periodEnd } : {}),
           })
           .eq('stripe_subscription_id', invoice.subscription)
-          .eq('status', 'grace_period');
+          .in('status', ['grace_period', 'payment_failed'])
+          .select('id, buyer_id, seller_id, plan_id');
+
+        if (recoveredMemberships && recoveredMemberships.length > 0) {
+          for (const m of recoveredMemberships) {
+            await assignDiscordRole(m.id, m.buyer_id, m.seller_id, m.plan_id);
+          }
+        }
 
         await writeAuditLog('update', {
           entity: 'membership',
           action_detail: 'grace_period_recovered',
           subscription_id: invoice.subscription,
+          recovered_count: recoveredMemberships?.length || 0,
         }, event.id);
       }
     } else if (event.type === 'invoice.payment_failed') {
@@ -368,7 +478,7 @@ Deno.serve(async (req: Request) => {
           })
           .eq('stripe_subscription_id', invoice.subscription)
           .in('status', ['grace_period', 'active'])
-          .select('buyer_id, seller_id, plan_id, manual_override')
+          .select('id, buyer_id, seller_id, plan_id, manual_override')
           .maybeSingle();
 
         await writeAuditLog('update', {
@@ -384,7 +494,7 @@ Deno.serve(async (req: Request) => {
             .eq('stripe_event_id', event.id);
 
           if (!updatedMembership.manual_override) {
-            await removeDiscordRole(updatedMembership.buyer_id, updatedMembership.seller_id, updatedMembership.plan_id);
+            await removeDiscordRole(updatedMembership.id, updatedMembership.buyer_id, updatedMembership.seller_id, updatedMembership.plan_id);
           } else {
             console.log('Manual override active. Skipping role removal for voided invoice.');
           }
@@ -422,7 +532,7 @@ Deno.serve(async (req: Request) => {
       const sub = event.data.object as Stripe.Subscription;
       const { data: membership } = await supabaseAdmin
         .from('memberships')
-        .select('buyer_id, seller_id, plan_id, manual_override')
+        .select('id, buyer_id, seller_id, plan_id, manual_override')
         .eq('stripe_subscription_id', sub.id)
         .single();
 
@@ -442,7 +552,7 @@ Deno.serve(async (req: Request) => {
 
         // Respect manual override: do not revoke if flag is true
         if (!membership.manual_override) {
-          await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+          await removeDiscordRole(membership.id, membership.buyer_id, membership.seller_id, membership.plan_id);
           await writeAuditLog('revoke_role', {
             entity: 'membership',
             buyer_id: membership.buyer_id,
@@ -463,34 +573,17 @@ Deno.serve(async (req: Request) => {
       // ─── Handle charge.refunded → transition to refunded ───
       const charge = event.data.object as Stripe.Charge;
       const invoiceId = charge.invoice as string | null;
-
-      // Helper to find the Connect account for Stripe API calls
-      const findStripeAccount = async (sellerId: string): Promise<string | undefined> => {
-        const { data } = await supabaseAdmin
-          .from('stripe_connected_accounts')
-          .select('stripe_account_id')
-          .eq('seller_id', sellerId)
-          .single();
-        return data?.stripe_account_id;
-      };
+      const stripeAcct = event.account; // C03 fix: Retrieve connected account ID from event directly
 
       if (invoiceId) {
         // Subscription-based refund: find membership via invoice -> subscription
         try {
-          // Try to find membership first to get the Connect account
-          const { data: memByCharge } = await supabaseAdmin
-            .from('memberships')
-            .select('seller_id, stripe_subscription_id')
-            .eq('stripe_customer_id', charge.customer as string)
-            .maybeSingle();
-
-          const stripeAcct = memByCharge?.seller_id ? await findStripeAccount(memByCharge.seller_id) : undefined;
           const invoice = await stripe.invoices.retrieve(invoiceId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
 
           if (invoice.subscription) {
             const { data: membership } = await supabaseAdmin
               .from('memberships')
-              .select('buyer_id, seller_id, plan_id, manual_override')
+              .select('id, buyer_id, seller_id, plan_id, manual_override')
               .eq('stripe_subscription_id', invoice.subscription)
               .single();
 
@@ -501,7 +594,7 @@ Deno.serve(async (req: Request) => {
                 .eq('stripe_subscription_id', invoice.subscription);
 
               if (!membership.manual_override) {
-                await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+                await removeDiscordRole(membership.id, membership.buyer_id, membership.seller_id, membership.plan_id);
               }
 
               await writeAuditLog('refund', {
@@ -523,7 +616,7 @@ Deno.serve(async (req: Request) => {
         if (buyer_id && plan_id) {
           const { data: membership } = await supabaseAdmin
             .from('memberships')
-            .select('buyer_id, seller_id, plan_id, manual_override')
+            .select('id, buyer_id, seller_id, plan_id, manual_override')
             .eq('buyer_id', buyer_id)
             .eq('plan_id', plan_id)
             .maybeSingle();
@@ -536,7 +629,7 @@ Deno.serve(async (req: Request) => {
               .eq('plan_id', plan_id);
 
             if (!membership.manual_override) {
-              await removeDiscordRole(membership.buyer_id, membership.seller_id, membership.plan_id);
+              await removeDiscordRole(membership.id, membership.buyer_id, membership.seller_id, membership.plan_id);
             }
 
             await writeAuditLog('refund', {
@@ -553,49 +646,30 @@ Deno.serve(async (req: Request) => {
       // ─── Handle charge.dispute.created → set risk_flag ───
       const dispute = event.data.object as Stripe.Dispute;
       const chargeId = dispute.charge as string;
+      const stripeAcct = event.account; // C03 fix: Optimized resolution
+
       if (chargeId) {
         // BUG-H02 fix: Use charge → invoice → subscription chain as primary resolution
-        // dispute.metadata?.customer is unreliable (often empty)
         let targetSubId: string | null = null;
-        let resolvedStripeAcct: string | undefined;
         try {
-          // First, try to find the seller via the charge on their Connect account
-          // Get all seller Stripe accounts to check which one owns this charge
-          const { data: allAccounts } = await supabaseAdmin
-            .from('stripe_connected_accounts')
-            .select('seller_id, stripe_account_id');
+          const charge = await stripe.charges.retrieve(chargeId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+          const invoiceId = charge.invoice as string | null;
+          if (invoiceId) {
+            const invoice = await stripe.invoices.retrieve(invoiceId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+            targetSubId = invoice.subscription as string | null;
+          }
 
-          for (const acct of (allAccounts ?? [])) {
-            try {
-              const charge = await stripe.charges.retrieve(chargeId, { stripeAccount: acct.stripe_account_id });
-              // Found the correct seller
-              resolvedStripeAcct = acct.stripe_account_id;
-              // Backfill seller_id on webhook event for strict RLS
+          if (stripeAcct) {
+            const { data: acct } = await supabaseAdmin
+              .from('stripe_connected_accounts')
+              .select('seller_id')
+              .eq('stripe_account_id', stripeAcct)
+              .maybeSingle();
+
+            if (acct) {
               await supabaseAdmin.from('stripe_webhook_events')
                 .update({ seller_id: acct.seller_id })
                 .eq('stripe_event_id', event.id);
-              const invoiceId = charge.invoice as string | null;
-              if (invoiceId) {
-                const invoice = await stripe.invoices.retrieve(invoiceId, { stripeAccount: acct.stripe_account_id });
-                targetSubId = invoice.subscription as string | null;
-              }
-              break;
-            } catch {
-              continue; // This seller doesn't own the charge
-            }
-          }
-
-          // Fallback: try platform-level (non-Connect) charge
-          if (!targetSubId) {
-            try {
-              const charge = await stripe.charges.retrieve(chargeId);
-              const invoiceId = charge.invoice as string | null;
-              if (invoiceId) {
-                const invoice = await stripe.invoices.retrieve(invoiceId);
-                targetSubId = invoice.subscription as string | null;
-              }
-            } catch {
-              // Not a platform-level charge either
             }
           }
         } catch (err) {
@@ -623,45 +697,12 @@ Deno.serve(async (req: Request) => {
       // ─── Handle charge.dispute.closed → update dispute_status ───
       const dispute = event.data.object as Stripe.Dispute;
       const chargeId = dispute.charge as string;
+      const stripeAcct = event.account; // C03 fix: Optimized resolution
+
       if (chargeId) {
         // Trace charge → invoice → subscription to find the specific membership
         let targetSubId: string | null = null;
         try {
-          // Find the specific membership with risk_flag AND matching charge
-          // First, find memberships flagged by the dispute.created handler for this dispute
-          const { data: flaggedMemberships } = await supabaseAdmin
-            .from('memberships')
-            .select('seller_id, stripe_subscription_id')
-            .eq('risk_flag', true)
-            .not('stripe_subscription_id', 'is', null);
-
-          // Try to resolve via charge chain for each flagged membership's seller
-          let stripeAcct: string | undefined;
-          let resolvedSellerId: string | undefined;
-          // Try each flagged membership to find the correct seller's Stripe account
-          for (const mem of (flaggedMemberships ?? [])) {
-            if (!mem.seller_id) continue;
-            const { data: acct } = await supabaseAdmin
-              .from('stripe_connected_accounts')
-              .select('stripe_account_id')
-              .eq('seller_id', mem.seller_id)
-              .single();
-            if (!acct?.stripe_account_id) continue;
-            try {
-              // Verify that this seller's Stripe account owns the charge
-              await stripe.charges.retrieve(chargeId, { stripeAccount: acct.stripe_account_id });
-              stripeAcct = acct.stripe_account_id;
-              resolvedSellerId = mem.seller_id;
-              break; // Found the correct seller
-            } catch {
-              continue; // This seller doesn't own the charge, try next
-            }
-          }
-          // Fallback: if no flagged membership matched, skip
-          if (!stripeAcct) {
-            console.warn('[stripe-webhook] Could not resolve seller for dispute.closed charge:', chargeId);
-          }
-
           const charge = await stripe.charges.retrieve(chargeId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
           const invoiceId = charge.invoice as string | null;
           if (invoiceId) {

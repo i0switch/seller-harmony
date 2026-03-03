@@ -1,235 +1,301 @@
-# seller-harmony バグ調査レポート
+# seller-harmony 不具合候補調査レポート（提出版）
 
 - 調査日: 2026-03-03
 - 対象リポジトリ: https://github.com/i0switch/seller-harmony
-- 調査範囲: Frontend / Supabase Edge Functions / Supabase migrations / 既存テスト / 既存ドキュメント
-- 実施制約: コード修正・コミット・PR作成なし（調査のみ）
+- 調査方針: 修正は行わず、不具合候補の再現可能性と証拠を重視
+- 注意: 本レポートでは「不具合候補」として記載し、断定はしていない
 
 ---
 
-## 1. 全体所見
+## 1. システム概要
 
-### リスクの高い領域
+### 主要機能
+- Seller: オンボーディング（Stripe/Discord）、プラン作成・公開、会員管理、Webhook閲覧
+- Buyer: プラン閲覧・購入、購入後のDiscord連携、会員ページ表示
+- Platform Admin: 全体監視・運用画面
 
-- 認可/RLS（sellerの更新権限、Webhook閲覧権限）
-- Hosted環境でのAPI接続経路（localhost依存）
-- E2E品質（状態依存テストの不安定化）
-- テスト資産の機密情報露出（固定メール/パスワード）
+### 主要ユーザー種別
+- `buyer`
+- `seller`
+- `platform_admin`
 
-### 重点的に見た理由
+### 主要データフロー
+1. Buyerが `/p/:id` で `stripe-checkout` GET を呼び出して購入対象プランを取得
+2. Buyerが `stripe-checkout` POST で Checkout Session を生成
+3. Stripe Webhook（`checkout.session.completed` 等）で `memberships` 状態更新
+4. Discord OAuth（state保存→code交換→save確定）で BuyerのDiscord連携を確定
+5. `discord-bot` が `grant_role` でDiscordロール付与
 
-- マルチテナントSaaSでは越権更新・越境閲覧が直接インシデント化するため
-- Stripe/Discord連携は失敗時の影響範囲が課金・権限付与に直結するため
-- 現行ドキュメントの準備完了表現と、実テスト結果の乖離が存在するため
-
----
-
-## 2. 確認済みバグ
-
-### 2-1. sellerがmembershipsの任意列を更新可能（manual_override用途を超える越権）
-
-- 深刻度: **Critical**
-- 種別: **Permissions**
-- 発生箇所: `supabase/migrations/20260303100000_bugfix_rls_and_memberships.sql`
-- 再現手順:
-  1. seller権限ユーザーでログイン
-  2. `memberships` の seller_id一致行へ `status` / `risk_flag` / `dispute_status` 等をUPDATE
-  3. 更新が通ることを確認
-- 実際の結果: seller_id一致のみでUPDATE許可され、更新列の制約がない
-- 期待結果: sellerは業務上必要な最小列のみ更新可能であるべき
-- 根拠ファイル/ログ:
-  - `supabase/migrations/20260303100000_bugfix_rls_and_memberships.sql` (FOR UPDATE, WITH CHECK が seller_id のみ)
-- 原因の仮説: UPDATEポリシーが行所有のみを判定し、列レベル統制が未実装
-- 修正方針の概要（コードは書かない）: 更新対象を限定するRPC/トリガー/列制約に分離
-
-### 2-2. Hosted環境でPlatform APIがlocalhost固定に落ち、機能停止
-
-- 深刻度: **High**
-- 種別: **Config**
-- 発生箇所:
-  - `src/services/api/http/client.ts`
-  - `src/services/api/index.ts`
-- 再現手順:
-  1. `VITE_API_URL` 未設定でHosted起動
-  2. Platform/Seller系API呼び出し
-  3. ブラウザ通信先が `http://localhost:8000` になる
-- 実際の結果: CORS/ERR_FAILEDでAPI失敗
-- 期待結果: Hostedでは有効なBackend URLへ接続される
-- 根拠ファイル/ログ:
-  - `src/services/api/http/client.ts` (`const BASE_URL = ... || "http://localhost:8000"`)
-  - `src/services/api/index.ts` (platformApiがHTTP実装を使用)
-  - `playwright-results.txt` (localhost向けCORSブロックログ)
-- 原因の仮説: HTTPクライアントのデフォルトBASE_URLがlocalhost、platform APIがHTTP依存のまま
-- 修正方針の概要（コードは書かない）: Hosted必須環境変数化、未設定時fail-fast、またはSupabase直結へ統一
-
-### 2-3. Seller Flow E2Eが既存アカウント状態に依存して恒常的に不安定
-
-- 深刻度: **Medium**
-- 種別: **Test**
-- 発生箇所:
-  - `tests/e2e/seller-flow.spec.ts`
-  - `src/pages/seller/OnboardingProfile.tsx`
-- 再現手順:
-  1. `runTests` で `seller-flow.spec.ts` 実行
-  2. 既にonboardedなsellerアカウントを利用
-  3. `/seller/onboarding/profile` からdashboardへリダイレクトされ、placeholder操作でTimeout
-- 実際の結果: テスト失敗（再実行でも再現）
-- 期待結果: テスト前提状態が固定され、常に同一フローを検証できる
-- 根拠ファイル/ログ:
-  - `tests/e2e/seller-flow.spec.ts` (`loginAsSeller(page)` 後に profile placeholder を前提操作)
-  - `src/pages/seller/OnboardingProfile.tsx` (`isOnboarded` なら dashboard に `Navigate`)
-  - `runTests` 実行結果: 該当specでTimeout失敗
-- 原因の仮説: 共有テストアカウントの進捗状態が固定されていない
-- 修正方針の概要（コードは書かない）: テストデータ初期化または使い捨てアカウント化
-
-### 2-4. テストコードに固定資格情報が平文で含まれる
-
-- 深刻度: **High**
-- 種別: **Security / Test**
-- 発生箇所:
-  - `tests/e2e/fixtures/auth.fixture.ts`
-  - `tests/e2e/edge-function-integration.spec.ts`
-  - `tests/e2e/security-tests.spec.ts`
-- 再現手順:
-  1. リポジトリ内テストコードを確認
-  2. 固定メール/パスワードが平文記載されていることを確認
-- 実際の結果: 認証情報が直接記載されている
-- 期待結果: 認証情報はSecret管理し、リポジトリ平文保持しない
-- 根拠ファイル/ログ:
-  - `tests/e2e/fixtures/auth.fixture.ts` (`SELLER_EMAIL`, `BUYER_EMAIL`, `TEST_PASSWORD`)
-  - `tests/e2e/edge-function-integration.spec.ts`（固定資格情報でトークン取得）
-  - `tests/e2e/security-tests.spec.ts`（固定資格情報使用）
-- 原因の仮説: テスト簡略化優先で機密管理ポリシー未適用
-- 修正方針の概要（コードは書かない）: CI Secret注入、権限最小化、定期ローテーション
+### 決済/Discord/認証の関連図の要約
+- 全Edge Functionは `verify_jwt = false` だが、関数内でBearer検証を実装
+- 決済状態の正本は `memberships`、ロール同期状態は `role_assignments`、イベント監査は `stripe_webhook_events`
+- Discord連携は2段階（情報取得と最終確定）で、状態遷移の整合性が重要
 
 ---
 
-## 3. 高確度のバグ候補
+## 2. 高優先度の不具合候補
 
-### 3-1. seller向けWebhook閲覧RLSが部分一致検索で越境閲覧を誘発し得る
+### ID: CAND-P0-01
+**タイトル**: 重複購入防止が競合に弱く、同時リクエストで二重課金が起こり得る不具合候補  
+**深刻度**: P0  
+**対象**: edge function / integration / database
 
-- 深刻度: **High**
-- 種別: **Permissions / Data**
-- 発生箇所: `supabase/migrations/20260303100000_bugfix_rls_and_memberships.sql`
-- 再現手順:
-  1. payloadに他seller UUID文字列を含むイベントを作成
-  2. sellerでWebhook一覧を取得
-- 実際の結果: `payload::text LIKE '%<uid>%` 判定で厳密なテナント紐付けでない
-- 期待結果: seller_idの構造化キーによる厳密一致
-- 根拠ファイル/ログ:
-  - `supabase/migrations/20260303100000_bugfix_rls_and_memberships.sql` (`payload::text LIKE ...`)
-  - `src/services/api/supabase/seller.ts` (`stripe_webhook_events` を直接参照)
-- 原因の仮説: 暫定対応として文字列検索ポリシーを採用
-- 修正方針の概要（コードは書かない）: 正規化カラム（seller_id）導入＋厳密RLS
+**症状**
+- 同一buyer・同一planへの同時POST時、事前チェックを双方通過し複数Checkout Sessionが生成される可能性。
 
-### 3-2. migrationチェーン内に現行スキーマ非互換SQLが残存
+**再現手順**
+1. 同一JWTで `stripe-checkout` POST（同一 `plan_id`）を同時に2本送る
+2. 両方が `existingMembership` 未検出のまま Session作成に進むか確認
 
-- 深刻度: **High**
-- 種別: **Data / Config**
-- 発生箇所:
-  - `supabase/migrations/20260303000001_public_buyer_policies.sql`
-  - `supabase/migrations/20260303100000_bugfix_rls_and_memberships.sql`
-  - `src/integrations/supabase/types.ts`
-- 再現手順:
-  1. 先頭からmigration適用
-  2. `plans.status` 参照ポリシー適用時の整合を確認
-- 実際の結果: 先行migrationに `status = 'published'` が残存、後続で修正前提
-- 期待結果: クリーン適用時にも常に整合
-- 根拠ファイル/ログ:
-  - `20260303000001_public_buyer_policies.sql`（`status = 'published'`）
-  - `20260303100000_bugfix_rls_and_memberships.sql`（`is_public`条件へ再作成）
-  - `src/integrations/supabase/types.ts`（`plans` に `status` 列なし）
-- 原因の仮説: 後続修正前提のマイグレーションが残存
-- 修正方針の概要（コードは書かない）: migration順序/内容の再整理とクリーン環境再適用検証
+**期待結果**
+- 片方のみ成功し、もう片方は重複として拒否される
 
-### 3-3. リリース準備ドキュメントと実テスト結果に乖離
+**実際結果**
+- 実装上、排他制御なしで事前チェック後にSession作成へ進む
 
-- 深刻度: **Medium**
-- 種別: **Test / Process**
-- 発生箇所:
-  - `docs/production-readiness-tests.md`
-  - `docs/qa/release-readiness.md`
-- 再現手順:
-  1. ドキュメントの「PASS/READY」表記を確認
-  2. 現行コードでrunTests実行
-- 実際の結果: 直近実行では失敗が再現
-- 期待結果: リリース判断文書は最新実行結果と一致
-- 根拠ファイル/ログ:
-  - `docs/production-readiness-tests.md`（145件ALL PASS前提）
-  - `docs/qa/release-readiness.md`（READY表記）
-  - runTests結果（seller-flow失敗再現）
-- 原因の仮説: 手動更新運用で同期が崩れている
-- 修正方針の概要（コードは書かない）: CI結果自動取り込みでreadiness文書を同期
+**証拠**
+- `supabase/functions/stripe-checkout/index.ts` の事前チェック: `existingMembership` 判定
+- 同ファイルで直後に `stripe.checkout.sessions.create(...)`
+- `supabase/functions/stripe-webhook/index.ts` は `upsert(..., { onConflict: 'buyer_id,plan_id' })`
+- Supabase MCP実確認: `memberships` に `UNIQUE (buyer_id, plan_id)` は存在（最終整合のみ）
+
+**原因仮説**
+- DB整合はWebhook時点で担保されるが、Checkout Session生成前の原子的排他がない
+
+**影響範囲**
+- 二重決済、返金対応増、会員状態の一時的不整合
+
+**確信度**: 高
 
 ---
 
-## 4. 未確認だが要調査の論点
+### ID: CAND-P0-02
+**タイトル**: Webhook冪等性が同時到達で `failed` 誤遷移し得る不具合候補  
+**深刻度**: P0  
+**対象**: edge function / database
 
-### 4-1. Edge Functions全体で `verify_jwt = false` 運用
+**症状**
+- 同一 `event.id` が同時到達すると、SELECT→INSERTの競合で片系が例外化し、既存イベントを `failed` 更新する可能性。
 
-- 何が怪しいか: すべて手動認証実装依存
-- なぜ怪しいか: 将来の分岐漏れで認証バイパス化リスク
-- 何を追加検証すべきか: 未認証/不正Bearerの網羅テストを全アクション分岐で実施
-- 参考: `supabase/config.toml`
+**再現手順**
+1. 同一 `Stripe-Signature` / 同一 `event.id` のWebhookを並列送信
+2. `stripe_webhook_events.processing_status` の推移を確認
 
-### 4-2. Discord role付与先guildのフォールバック選択
+**期待結果**
+- duplicateは常に200 duplicate応答で、既存processed行を破壊しない
 
-- 何が怪しいか: plan紐付けguild欠損時にseller最新guildへフォールバック
-- なぜ怪しいか: 誤サーバー付与/剥奪の可能性
-- 何を追加検証すべきか: `plan.discord_server_id` 欠損ケースの付与先妥当性
-- 参考: `supabase/functions/discord-bot/index.ts`
+**実際結果**
+- 実装は2段階（重複チェック→INSERT）で、例外時に `failed` 更新分岐がある
 
-### 4-3. Webhook冪等性の競合時挙動
+**証拠**
+- `supabase/functions/stripe-webhook/index.ts` の「Idempotency: skip already-processed events」
+- 同ファイルの pending INSERT
+- 同ファイルの catch節で `processing_status: 'failed'` 更新
+- Supabase MCP実確認: `stripe_webhook_events.stripe_event_id` は UNIQUE
 
-- 何が怪しいか: 事前SELECT→INSERTの2段制御
-- なぜ怪しいか: 同時到達で片系が失敗遷移する可能性
-- 何を追加検証すべきか: 同一event_idの同時投下負荷試験と `processing_status` 一貫性確認
-- 参考: `supabase/functions/stripe-webhook/index.ts`
+**原因仮説**
+- `ON CONFLICT DO NOTHING` 一発処理ではなく、事前SELECT依存のため競合窓がある
 
----
+**影響範囲**
+- Webhook再送ループ、監視ノイズ、状態不整合
 
-## 5. テストの穴
-
-### 未カバー領域
-
-- RLS攻撃視点検証（seller越権UPDATE、Webhook越境閲覧）
-- Stripe Webhook同時実行/再送競合
-- Discord連携の誤guildフォールバック
-- Hosted構成でのPlatform API接続健全性
-
-### 追加すべきテスト観点
-
-- seller JWTで `memberships.status/risk_flag/dispute_status` を更新できないこと
-- `stripe_webhook_events` を seller間で相互不可視にできること
-- `VITE_API_URL` 未設定時に起動失敗（fail-fast）すること
-- E2Eをデータ初期化付きで実行し、状態依存フレークを排除すること
-- ルート存在確認中心テストを、実データ整合確認まで拡張すること
+**確信度**: 中
 
 ---
 
-## 6. 優先順位つき一覧
+### ID: CAND-P1-01
+**タイトル**: `inactive` プラン拒否ロジックがスキーマ不一致で実効性不明な不具合候補  
+**深刻度**: P1  
+**対象**: edge function / database / integration
 
-### P0
+**症状**
+- `stripe-checkout` が `plan.is_active` を判定しているが、実DBの `plans` 列に `is_active` が存在しない。
 
-1. sellerのmemberships過剰UPDATE権限（越権）
-2. Hostedでlocalhost依存となるAPI接続設定
-3. テスト資格情報の平文管理
+**再現手順**
+1. `stripe-checkout` の `is_active` 判定箇所を確認
+2. Supabase MCPで `public.plans` の列定義を確認
 
-### P1
+**期待結果**
+- inactive概念を表現する列/状態と購入拒否ロジックが一致
 
-1. seller向けWebhook閲覧RLSの部分一致判定
-2. migrationチェーンの非互換SQL残存
-3. リリース判定文書と実テスト結果の同期不全
+**実際結果**
+- 判定コードと実スキーマが一致していない
 
-### P2
+**証拠**
+- `supabase/functions/stripe-checkout/index.ts` の `if (plan.is_active === false)`
+- Supabase MCP実確認: `plans` 列一覧に `is_active` なし
+- `src/integrations/supabase/types.ts` の `plans` 型にも `is_active` なし
 
-1. seller-flow E2Eの状態依存フレーク
-2. `verify_jwt = false` 運用の分岐漏れ耐性
-3. Discord guildフォールバック誤付与リスク
+**原因仮説**
+- 旧実装残骸、または移行漏れ
+
+**影響範囲**
+- hidden/inactive/deleted の扱い不整合、購入可否判定の誤り
+
+**確信度**: 高
 
 ---
 
-## 補足
+### ID: CAND-P1-02
+**タイトル**: Discord OAuth最終確定で `active` 化するがロール付与保証がない不具合候補  
+**深刻度**: P1  
+**対象**: edge function / integration
 
-- 本調査ではファイル編集・コミット・PR作成は行っていない（本レポート作成のみ）。
-- 実施した検証は静的読解と既存テスト実行（runTests/lint）に限定。
+**症状**
+- `discord-oauth` の finalize（`save=true`）で `pending_discord -> active` 更新は実施するが、同処理で `grant_role` は実行されない。
+
+**再現手順**
+1. OAuth code交換後、`save=true`（codeなし）で finalize
+2. `memberships.status` と `role_assignments` の整合を確認
+
+**期待結果**
+- `active` 化とDiscordロール付与結果の整合が同一フローで担保
+
+**実際結果**
+- `active` 更新のみ先行し、ロール付与は別導線依存
+
+**証拠**
+- `supabase/functions/discord-oauth/index.ts` の finalize分岐（`shouldSave && !actualCode`）
+- 同分岐で `memberships.update({ status: 'active' })`
+- `grant_role` は `supabase/functions/discord-bot/index.ts` の別actionでのみ実施
+
+**原因仮説**
+- 2段階フローで状態更新と権限付与の境界が分離しすぎている
+
+**影響範囲**
+- 「activeだがDiscord権限未付与」の問い合わせ増
+
+**確信度**: 中
+
+---
+
+### ID: CAND-P1-03
+**タイトル**: Hosted環境でlocalhost APIフォールバックにより主要導線が停止する不具合候補  
+**深刻度**: P1  
+**対象**: frontend / integration / test
+
+**症状**
+- `VITE_API_URL` 未設定時、Platform/Seller API が `http://localhost:8000` を参照し、Hosted環境でCORS失敗。
+
+**再現手順**
+1. Hosted環境で `VITE_API_URL` を未設定
+2. Seller/Platform画面のデータ取得を実行
+
+**期待結果**
+- Hostedで有効APIへ接続、または起動時にfail-fast
+
+**実際結果**
+- localhost向けリクエストが発生し、ブラウザでブロック
+
+**証拠**
+- `src/services/api/http/client.ts`: `const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";`
+- `playwright-results.txt`: loopback address space/CORS block ログ
+
+**原因仮説**
+- 環境変数未設定時の安全側制御が不足
+
+**影響範囲**
+- Seller/Platform主要機能の実質停止
+
+**確信度**: 高
+
+---
+
+### ID: CAND-P1-04
+**タイトル**: Buyer系E2EがESM互換性エラーで実行不能な不具合候補  
+**深刻度**: P1  
+**対象**: test
+
+**症状**
+- Buyer導線テストが `ReferenceError: __dirname is not defined in ES module scope` で開始直後に失敗。
+
+**再現手順**
+1. `runTests` で `tests/e2e/tc17-buyer-checkout.spec.ts` または `tests/e2e/buyer-flow.spec.ts` を実行
+
+**期待結果**
+- fixture読み込みで失敗せず、シナリオ検証へ進む
+
+**実際結果**
+- fixture初期化で即失敗
+
+**証拠**
+- `tests/e2e/fixtures/auth.fixture.ts`: `path.resolve(__dirname, '../../../.env.test')`
+- 実行結果: runTests失敗（ReferenceError）
+
+**原因仮説**
+- ESM実行環境でCJS前提の `__dirname` を利用
+
+**影響範囲**
+- 購入完了〜Discord連携導線の自動回帰検知が不能
+
+**確信度**: 高
+
+---
+
+## 3. 仕様かバグか不明な論点
+
+### 論点 A: `platform_admin` の buyer画面アクセス許可
+- **どこが曖昧か**: 監査/運用目的の意図的仕様か、境界緩和か不明
+- **確認すべき実装/テーブル/画面/ログ**:
+  - `src/layouts/BuyerLayout.tsx` の `BUYER_ALLOWED_ROLES = ["buyer", "platform_admin"]`
+  - 運用設計書（platform_adminの許可範囲）
+
+### 論点 B: discord-bot の fallback server 選択
+- **どこが曖昧か**: `plan.discord_server_id` 未設定時に seller唯一serverへ自動フォールバックする仕様の是非
+- **確認すべき実装/テーブル/画面/ログ**:
+  - `supabase/functions/discord-bot/index.ts` の `ambiguous_server` / `discord_server_not_configured` 分岐
+  - `plans.discord_server_id` の運用必須性
+
+### 論点 C: `memberships` RLSポリシーの重複
+- **どこが曖昧か**: 実害のない冗長か、許可面積拡大か不明
+- **確認すべき実装/テーブル/画面/ログ**:
+  - Supabase MCPで取得した `pg_policies`（`memberships` の複数SELECT/UPDATE policy）
+  - 旧migration適用順と本番適用履歴
+
+---
+
+## 4. テスト欠落
+
+### 現状不足しているテスト
+1. 同一buyer・同一plan同時POST時のCheckout競合テスト
+2. 同一Stripe event同時到達時のWebhook冪等性/状態遷移テスト
+3. inactive/hidden/deletedプラン購入可否の統合テスト（スキーマ整合含む）
+4. OAuth finalize後の `memberships` と `role_assignments` 整合テスト
+5. E2E fixtureのESM互換性テスト（実行基盤健全性）
+
+### 優先順位
+- **P0**: 1, 2
+- **P1**: 3, 4, 5
+
+### なぜ危険か
+- P0は課金事故・状態不整合に直結
+- P1は主要導線（購入/連携）の品質劣化と検知不能化を招く
+
+---
+
+## 5. 未確認領域
+
+### 見切れていない箇所
+1. Stripe実イベント再送を伴う高並列Webhook検証
+2. 本番同等Discord組織での複数サーバ運用時挙動
+3. Supabase関数実行ログの時系列（失敗→再試行）全量
+
+### その理由
+- データ破壊回避のため、課金・外部連携の強い操作を限定
+- 本調査では非破壊の静的読解＋限定実行テスト＋Supabaseメタ情報確認を優先
+
+---
+
+## 付録: 実施確認（非破壊）
+
+- Edge Function系テスト実行: `tests/e2e/edge-function-integration.spec.ts`, `tests/e2e/security-tests.spec.ts`（通過）
+- Buyer系テスト実行: `tests/e2e/tc17-buyer-checkout.spec.ts` など（fixtureのESMエラーで失敗）
+- Supabase MCP確認:
+  - `plans` 実列定義（`is_active` 不在）
+  - `memberships` 制約（`UNIQUE (buyer_id, plan_id)` あり）
+  - `stripe_webhook_events` 制約（`stripe_event_id` UNIQUE あり）
+  - `memberships` の seller更新制限トリガー有効化状態
+
+---
+
+以上。

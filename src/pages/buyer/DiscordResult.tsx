@@ -52,7 +52,12 @@ export default function DiscordResult() {
         });
 
         if (error || !data) throw new Error(error?.message || "Function error");
-        if (data.error) throw new Error(data.error);
+
+        if (data.error) {
+          const err = new Error(data.error);
+          (err as any).code = data.code;
+          throw err;
+        }
 
         setAuthResult({
           discordUsername: data.discord_user?.username || "Discord User",
@@ -61,10 +66,17 @@ export default function DiscordResult() {
           planName: "プラン",
         });
         setStatus("success"); // We'll use a local state to distinguish between "Confirming" and "Finalized"
-      } catch (err: unknown) {
+      } catch (err: any) {
         console.error("OAuth exchange failed:", err);
-        setErrorMessage("Discord情報の取得に失敗しました。");
-        setStatus("error");
+        if (err.code === 'DISCORD_ALREADY_LINKED') {
+          setErrorMessage(err.message || "このDiscordアカウントは、すでに別のユーザーアカウントに連携されています。");
+          setStatus("error");
+          // Store the specific error code to show specialized UI
+          setAuthResult({ code: 'DISCORD_ALREADY_LINKED' } as any);
+        } else {
+          setErrorMessage(err.message || "Discord情報の取得に失敗しました。");
+          setStatus("error");
+        }
       }
     };
 
@@ -80,14 +92,23 @@ export default function DiscordResult() {
         body: { save: true }
       });
 
-      if (error || !data?.success) throw new Error(error?.message || "Finalize failed");
+      if (error || !data?.success) {
+        const err = new Error(error?.message || data?.error || "Finalize failed");
+        (err as any).code = data?.code;
+        throw err;
+      }
 
       sessionStorage.removeItem("discord_oauth_state");
       setIsFinalized(true);
       setConfirmingSave(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setErrorMessage("連携の最終処理に失敗しました。");
+      if (err.code === 'DISCORD_ALREADY_LINKED') {
+        setErrorMessage(err.message || "このDiscordアカウントは、すでに別のユーザーアカウントに連携されています。");
+        setAuthResult({ code: 'DISCORD_ALREADY_LINKED' } as any);
+      } else {
+        setErrorMessage("連携の最終処理に失敗しました。");
+      }
       setStatus("error");
       setConfirmingSave(false);
     }
@@ -102,7 +123,7 @@ export default function DiscordResult() {
     );
   }
 
-  if (status === "success" && authResult) {
+  if (status === "success" && authResult && (authResult as any).discordUsername) {
     return (
       <div className="space-y-5">
         {/* Success / Confirm */}
@@ -189,6 +210,8 @@ export default function DiscordResult() {
   }
 
   // Failure state
+  const isLinkedError = (authResult as any)?.code === 'DISCORD_ALREADY_LINKED';
+
   return (
     <div className="space-y-5">
       <div className="glass-card rounded-xl p-6 text-center space-y-3">
@@ -209,27 +232,50 @@ export default function DiscordResult() {
         </AlertDescription>
       </Alert>
 
-      <div className="glass-card rounded-xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold">考えられる原因</h2>
-        <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-          <li>Discordサーバーの招待リンクが無効になっている</li>
-          <li>Botがサーバーから削除されている</li>
-          <li>一時的なDiscordの障害が発生している</li>
-        </ul>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
-          <span>エラーコード:</span>
-          <Badge variant="outline" className="font-mono text-xs">OAUTH_FAILED</Badge>
+      {isLinkedError ? (
+        <div className="glass-card border-accent/20 rounded-xl p-5 space-y-3 bg-accent/5">
+          <h2 className="text-sm font-semibold flex items-center gap-2 text-accent">
+            <RotateCcw className="h-4 w-4" /> 復旧のためのヒント
+          </h2>
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>このDiscordアカウントは、すでに別のメールアドレスで作成したアカウントに連携されている可能性があります。</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs">
+              <li>以前、別のメールアドレス（Googleログイン等）でログインしていませんでしたか？</li>
+              <li>心当たりがある場合は、一度ログアウトして別のアカウントでログインをお試しください。</li>
+            </ul>
+          </div>
+          <Button variant="outline" size="sm" asChild className="w-full mt-2">
+            <Link to="/auth">別のアカウントでログインし直す</Link>
+          </Button>
         </div>
+      ) : (
+        <div className="glass-card rounded-xl p-5 space-y-3">
+          <h2 className="text-sm font-semibold">考えられる原因</h2>
+          <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+            <li>Discordサーバーの招待リンクが無効になっている</li>
+            <li>Botがサーバーから削除されている</li>
+            <li>一時的なDiscordの障害が発生している</li>
+          </ul>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 px-1">
+        <span>エラーコード:</span>
+        <Badge variant="outline" className="font-mono text-xs">
+          {isLinkedError ? 'DISCORD_ALREADY_LINKED' : 'OAUTH_FAILED'}
+        </Badge>
       </div>
 
       {/* Actions */}
       <div className="space-y-3">
-        <Button asChild className="w-full h-12 text-base font-bold">
-          <Link to="/buyer/discord/confirm">
-            <RotateCcw className="h-5 w-5 mr-2" />
-            もう一度連携する
-          </Link>
-        </Button>
+        {!isLinkedError && (
+          <Button asChild className="w-full h-12 text-base font-bold">
+            <Link to="/buyer/discord/confirm">
+              <RotateCcw className="h-5 w-5 mr-2" />
+              もう一度連携を試す
+            </Link>
+          </Button>
+        )}
 
         <div className="glass-card rounded-lg p-4 text-sm space-y-2">
           <p className="font-semibold flex items-center gap-2">

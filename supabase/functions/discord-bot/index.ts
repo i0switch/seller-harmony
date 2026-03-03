@@ -281,14 +281,14 @@ Deno.serve(async (req: Request) => {
       if (!grantRes.ok) {
         const reason = await grantRes.text();
 
-        await supabaseAdmin.from('role_assignments').insert({
+        await supabaseAdmin.from('role_assignments').upsert({
           membership_id: membership.id,
           discord_user_id: identity.discord_user_id,
           guild_id: guildId,
           role_id: plan.discord_role_id,
           actual_state: 'failed',
           error_reason: reason,
-        });
+        }, { onConflict: 'membership_id' });
 
         return new Response(
           JSON.stringify({ status: 'failed', reason }),
@@ -296,14 +296,14 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      await supabaseAdmin.from('role_assignments').insert({
+      await supabaseAdmin.from('role_assignments').upsert({
         membership_id: membership.id,
         discord_user_id: identity.discord_user_id,
         guild_id: guildId,
         role_id: plan.discord_role_id,
         actual_state: 'granted',
         error_reason: null,
-      });
+      }, { onConflict: 'membership_id' });
 
       return new Response(
         JSON.stringify({ status: 'ok', membership_id, action: 'role_granted' }),

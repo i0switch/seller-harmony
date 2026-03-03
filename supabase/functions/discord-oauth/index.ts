@@ -129,11 +129,19 @@ Deno.serve(async (req: Request) => {
       }
 
       // Activate pending_discord memberships
-      await supabaseAdmin
+      const { data: activatedMemberships } = await supabaseAdmin
         .from('memberships')
         .update({ status: 'active' })
         .eq('buyer_id', user.id)
-        .eq('status', 'pending_discord');
+        .eq('status', 'pending_discord')
+        .select();
+
+      // CAND-P1-02: Auto-grant roles for all activated memberships (2-step flow)
+      if (activatedMemberships && activatedMemberships.length > 0) {
+        for (const membership of activatedMemberships) {
+          await assignDiscordRole(supabaseAdmin, membership.id, user.id, membership.seller_id, membership.plan_id);
+        }
+      }
 
       // Clear oauth_state (finalized)
       await supabaseAdmin
@@ -141,7 +149,7 @@ Deno.serve(async (req: Request) => {
         .update({ oauth_state: null, oauth_state_created_at: null })
         .eq('user_id', user.id);
 
-      return new Response(JSON.stringify({ success: true, saved: true }), {
+      return new Response(JSON.stringify({ success: true, saved: true, activated_count: activatedMemberships?.length || 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -208,25 +216,54 @@ Deno.serve(async (req: Request) => {
     // BUG-B02 fix: Always save tokens after code exchange (code is one-time use)
     // When save=false (step 1), store tokens but keep oauth_state for verification.
     // When save=true (single-step flow), clear oauth_state immediately.
-    await supabaseAdmin.from('discord_identities').upsert({
-      user_id: user.id,
-      discord_user_id: meData.id,
-      discord_username: `${meData.username}${meData.discriminator !== '0' ? `#${meData.discriminator}` : ''}`,
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-      ...(shouldSave
-        ? { oauth_state: null, oauth_state_created_at: null }
-        : {}),
-    }, { onConflict: 'user_id' });
+    try {
+      const { error: upsertError } = await supabaseAdmin.from('discord_identities').upsert({
+        user_id: user.id,
+        discord_user_id: meData.id,
+        discord_username: `${meData.username}${meData.discriminator !== '0' ? `#${meData.discriminator}` : ''}`,
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+        ...(shouldSave
+          ? { oauth_state: null, oauth_state_created_at: null }
+          : {}),
+      }, { onConflict: 'user_id' });
+
+      if (upsertError) {
+        // Postgres error code 23505 is unique_violation
+        if (upsertError.code === '23505') {
+          return new Response(JSON.stringify({
+            error: 'このDiscordアカウントは、すでに別のユーザーアカウントに連携されています。',
+            code: 'DISCORD_ALREADY_LINKED'
+          }), {
+            status: 409,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        throw upsertError;
+      }
+    } catch (upsertErr: any) {
+      console.error('Upsert discord_identity failed:', upsertErr);
+      throw upsertErr;
+    }
 
     if (shouldSave) {
       // Activate any pending_discord memberships for this buyer
-      await supabaseAdmin
+      const { data: memberships } = await supabaseAdmin
         .from('memberships')
         .update({ status: 'active' })
         .eq('buyer_id', user.id)
-        .eq('status', 'pending_discord');
+        .eq('status', 'pending_discord')
+        .select();
+
+      // CAND-P1-02: Auto-grant roles for all activated memberships
+      if (memberships && memberships.length > 0) {
+        for (const membership of memberships) {
+          // Fire and forget (or track, but we don't want to block the OAuth redirect too long)
+          // Actually, since we want to be "irreversible" or at least consistent, we'll wait for them
+          await assignDiscordRole(supabaseAdmin, membership.id, user.id, membership.seller_id, membership.plan_id);
+        }
+      }
     }
 
     return new Response(JSON.stringify({
@@ -241,11 +278,86 @@ Deno.serve(async (req: Request) => {
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: unknown) {
-    console.error('discord-oauth error:', error instanceof Error ? error.message : String(error));
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+  } catch (error: any) {
+    console.error('discord-oauth error:', error?.message || String(error));
+
+    // If it's our custom error response, return it directly
+    if (error instanceof Response) return error;
+
+    return new Response(JSON.stringify({
+      error: error?.message || 'Internal server error',
+      code: error?.code || 'INTERNAL_ERROR'
+    }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
+
+/**
+ * CAND-P1-02: Assign a Discord role to a buyer and record the result in role_assignments.
+ */
+async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userId: string, sellerId: string, planId: string) {
+  const DISCORD_BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') || '';
+  if (!DISCORD_BOT_TOKEN) return;
+
+  try {
+    const { data: identity } = await supabaseAdmin
+      .from('discord_identities')
+      .select('discord_user_id')
+      .eq('user_id', userId)
+      .single();
+
+    const { data: plan } = await supabaseAdmin
+      .from('plans')
+      .select('discord_role_id, discord_server_id')
+      .eq('id', planId)
+      .single();
+
+    if (!identity?.discord_user_id || !plan?.discord_role_id) return;
+
+    let guildId = '';
+    if (plan.discord_server_id) {
+      const { data: server } = await supabaseAdmin
+        .from('discord_servers')
+        .select('guild_id')
+        .eq('id', plan.discord_server_id)
+        .single();
+      guildId = server?.guild_id;
+    } else {
+      // Fallback: use seller's only server if possible
+      const { data: servers } = await supabaseAdmin
+        .from('discord_servers')
+        .select('guild_id')
+        .eq('seller_id', sellerId);
+      if (servers && servers.length === 1) {
+        guildId = servers[0].guild_id;
+      }
+    }
+
+    if (!guildId) return;
+
+    const res = await fetch(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}/roles/${plan.discord_role_id}`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+      }
+    );
+
+    const status = res.ok ? 'granted' : 'failed';
+    const reason = res.ok ? null : await res.text();
+
+    await supabaseAdmin.from('role_assignments').upsert({
+      membership_id: membershipId,
+      discord_user_id: identity.discord_user_id,
+      guild_id: guildId,
+      role_id: plan.discord_role_id,
+      actual_state: status,
+      error_reason: reason,
+    }, { onConflict: 'membership_id' });
+
+  } catch (err) {
+    console.error('assignDiscordRole error:', err);
+  }
+}

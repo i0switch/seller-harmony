@@ -10,6 +10,10 @@
 import { Page } from '@playwright/test';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESM では __dirname が存在しないため import.meta.url から導出
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env.test from project root
 dotenv.config({ path: path.resolve(__dirname, '../../../.env.test') });
@@ -26,8 +30,8 @@ function requireEnv(key: string, fallback?: string): string {
 }
 
 export const SELLER_EMAIL = requireEnv('TEST_SELLER_EMAIL');
-export const BUYER_EMAIL  = requireEnv('TEST_BUYER_EMAIL');
-export const ADMIN_EMAIL  = requireEnv('TEST_ADMIN_EMAIL');
+export const BUYER_EMAIL = requireEnv('TEST_BUYER_EMAIL');
+export const ADMIN_EMAIL = requireEnv('TEST_ADMIN_EMAIL');
 export const TEST_PASSWORD = requireEnv('TEST_PASSWORD');
 
 /**
