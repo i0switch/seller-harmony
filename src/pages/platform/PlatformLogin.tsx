@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +14,12 @@ export default function PlatformLogin() {
   const { login, isLoggedIn } = usePlatformAuth();
   const { toast } = useToast();
 
-  // If already logged in, redirect
-  if (isLoggedIn) {
-    navigate("/platform/dashboard", { replace: true });
-  }
+  // If already logged in, redirect (via useEffect to avoid render-time side-effect)
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate("/platform/dashboard", { replace: true });
+    }
+  }, [isLoggedIn, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

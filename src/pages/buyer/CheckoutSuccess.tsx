@@ -46,7 +46,7 @@ export default function CheckoutSuccess() {
         if (membershipError) throw membershipError;
 
         if (membership) {
-          const planData = membership.plans as any;
+          const planData = membership.plans as { name?: string; price?: number; currency?: string; interval?: string; discord_server_id?: string } | null;
 
           // seller_profiles を別クエリで取得 (直接FKなし)
           let sellerStoreName = "販売者";
@@ -102,7 +102,48 @@ export default function CheckoutSuccess() {
     );
   }
 
-  if (!plan) return null;
+  // Fallback UI when plan data is not available (no session_id, webhook pending, etc.)
+  if (!plan) {
+    return (
+      <div className="space-y-5">
+        {warning && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{warning}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="glass-card rounded-xl p-6 text-center space-y-3">
+          <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto">
+            <CheckCircle className="h-10 w-10 text-success" />
+          </div>
+          <h1 className="text-xl font-bold">ありがとうございます！</h1>
+          <p className="text-sm text-muted-foreground">
+            購入処理が完了しました。詳しい情報はマイページでご確認いただけます。
+          </p>
+        </div>
+
+        <div className="glass-card rounded-xl p-5 space-y-4">
+          <div className="text-center space-y-2">
+            <MessageCircle className="h-10 w-10 mx-auto text-accent" />
+            <h2 className="font-bold">Discordに参加して連携しよう</h2>
+            <p className="text-sm text-muted-foreground">
+              限定サーバーに参加し、限定コンテンツにアクセスしましょう。
+            </p>
+          </div>
+          <Button asChild className="w-full h-12 text-base font-bold">
+            <Link to="/buyer/discord/confirm">
+              <MessageCircle className="h-5 w-5 mr-2" />
+              Discordを連携する
+            </Link>
+          </Button>
+          <Button variant="outline" asChild size="sm" className="w-full">
+            <Link to="/member/me">マイページへ</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

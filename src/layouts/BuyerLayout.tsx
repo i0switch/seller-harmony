@@ -1,6 +1,29 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Loader2 } from "lucide-react";
+
+// Public paths that don't require authentication
+const PUBLIC_PATHS = ["/p/", "/checkout/success", "/buyer/login", "/buyer/discord/result"];
 
 export default function BuyerLayout() {
+  const { session, isLoading } = useAuth();
+  const location = useLocation();
+
+  const isPublicPath = PUBLIC_PATHS.some(p => location.pathname.startsWith(p));
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Guard: redirect to buyer login if not logged in (except public paths)
+  if (!session && !isPublicPath) {
+    return <Navigate to="/buyer/login" replace state={{ from: location.pathname }} />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="h-14 border-b flex items-center justify-center bg-card">

@@ -74,6 +74,7 @@ function toSellerBillingStatus(status: string): SellerMember["billingStatus"] {
   return "active";
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getPayloadSellerId(payload: any): string | null {
   return payload?.data?.object?.metadata?.seller_id ?? null;
 }
@@ -100,7 +101,21 @@ export const sellerApi: ISellerApi = {
       .is("deleted_at", null);
 
     const activePlans = plans?.filter((p) => p.is_public).length ?? 0;
-    const mrr = plans?.filter((p) => p.is_public).reduce((sum, p) => sum + (p.price ?? 0), 0) ?? 0;
+
+    // Calculate MRR: sum of (active_member_count * plan_price) for each plan
+    const { data: activeMemberships } = await supabase
+      .from("memberships")
+      .select("plan_id")
+      .eq("seller_id", user.id)
+      .in("status", ["active", "grace_period", "cancel_scheduled"]);
+
+    let mrr = 0;
+    if (activeMemberships && plans) {
+      const planPriceMap = new Map(plans.map(p => [p.id, p.price ?? 0]));
+      for (const m of activeMemberships) {
+        mrr += planPriceMap.get(m.plan_id) ?? 0;
+      }
+    }
 
     return {
       totalMembers: totalMembers ?? 0,
@@ -183,6 +198,7 @@ export const sellerApi: ISellerApi = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: any = { updated_at: new Date().toISOString() };
     if (settings.guildId !== undefined) updates.guild_id = settings.guildId;
     if (settings.botConnected !== undefined) updates.bot_installed = settings.botConnected;
@@ -222,10 +238,14 @@ export const sellerApi: ISellerApi = {
   },
 
   async getPlanById(id): Promise<SellerPlan | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { data, error } = await supabase
       .from("plans")
       .select("*, discord_servers(*)")
       .eq("id", id)
+      .eq("seller_id", user.id)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
@@ -330,10 +350,14 @@ export const sellerApi: ISellerApi = {
   },
 
   async getMemberById(id): Promise<SellerMember | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { data, error } = await supabase
       .from("memberships")
       .select("*, plans(name)")
       .eq("id", id)
+      .eq("seller_id", user.id)
       .maybeSingle();
 
     if (error || !data) return null;
@@ -356,12 +380,16 @@ export const sellerApi: ISellerApi = {
   },
 
   async getMemberTimeline(memberId): Promise<TimelineEvent[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const events: TimelineEvent[] = [];
 
     const { data: membership } = await supabase
       .from("memberships")
       .select("id, status, created_at, updated_at, stripe_subscription_id")
       .eq("id", memberId)
+      .eq("seller_id", user.id)
       .maybeSingle();
 
     if (!membership) return [];
@@ -406,6 +434,7 @@ export const sellerApi: ISellerApi = {
         .order("created_at", { ascending: false })
         .limit(50);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (webhookRows ?? []).forEach((row: any) => {
         const subId = row?.payload?.data?.object?.subscription;
         if (subId && subId === membership.stripe_subscription_id) {
@@ -460,6 +489,7 @@ export const sellerApi: ISellerApi = {
       }
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows: CrosscheckRow[] = memberships.map((m: any) => {
       const discordUsername = identityMap.get(m.buyer_id) ?? "";
       const assignment = assignmentMap.get(m.id);
@@ -526,7 +556,7 @@ export const sellerApi: ISellerApi = {
       .from("memberships")
       .update({ manual_override: true })
       .eq("id", memberId);
-    
+
     if (error) throw new Error(error.message);
   },
 
@@ -541,8 +571,8 @@ export const sellerApi: ISellerApi = {
 
     // Call edge function to invoke retry
     const { error } = await supabase.functions.invoke("discord-bot", {
-      body: { 
-        action: "grant_role", 
+      body: {
+        action: "grant_role",
         membership_id: memberId
       }
     });
@@ -573,6 +603,7 @@ export const sellerApi: ISellerApi = {
       return { items: [], page, page_size: pageSize, total_count: 0 };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sellerEvents = (data ?? []).filter((row: any) => {
       const sellerId = getPayloadSellerId(row.payload);
       if (!sellerId || sellerId !== user.id) return false;
@@ -585,6 +616,7 @@ export const sellerApi: ISellerApi = {
     const start = (page - 1) * pageSize;
     const paged = sellerEvents.slice(start, start + pageSize);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: PlatformWebhookEvent[] = paged.map((row: any) => ({
       id: row.id,
       eventType: row.event_type,
