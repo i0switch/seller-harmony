@@ -10,17 +10,16 @@ import { supabase } from "@/integrations/supabase/client";
 export default function OnboardingProfile() {
   const navigate = useNavigate();
   const { isOnboarded, setOnboardingStep } = useSellerAuth();
-
-  // Guard: redirect to dashboard if already onboarded
-  if (isOnboarded) {
-    return <Navigate to="/seller/dashboard" replace />;
-  }
-
   const [displayName, setDisplayName] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Guard: redirect to dashboard if already onboarded
+  if (isOnboarded) {
+    return <Navigate to="/seller/dashboard" replace />;
+  }
 
   const validate = () => {
     const e: Record<string, string> = {};

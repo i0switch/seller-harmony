@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsBuyer } from './fixtures/auth.fixture';
+import { loginAsBuyer, loginAsSeller } from './fixtures/auth.fixture';
 
 /**
  * TC-23: 横断的検証（認証ガード・ナビゲーション・共通コンポーネント）
@@ -41,19 +41,21 @@ test.describe('TC-23: 横断的検証', () => {
     }
   });
 
-  test('TC-23-03: Buyerルートは認証不要でアクセス可能', async ({ page }) => {
-    // Buyer pages should be accessible without authentication
-    // /checkout/success needs session_id + API mocks, /buyer/discord/confirm needs auth mocks
-    // /member/me renders the BuyerLayout header unconditionally
+  test('TC-23-03: Buyer公開ルートはアクセス可能、認証必須ルートはリダイレクトされる', async ({ page }) => {
+    // Public paths (no auth required)
+    await page.goto('/checkout/success');
+    // Without session_id, error/fallback state is shown — but page renders without crash
+    await expect(page.locator('body')).toBeVisible({ timeout: 10000 });
+
+    await page.goto('/buyer/login');
+    await expect(page.getByText('購入者ログイン')).toBeVisible({ timeout: 10000 });
+
+    // Auth-required paths redirect to /buyer/login
     await page.goto('/member/me');
-    await expect(page.getByText('🎫 ファンクラブ')).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/buyer\/login/, { timeout: 10000 });
 
     await page.goto('/buyer/discord/confirm');
-    await expect(page.getByText('Discord連携')).toBeVisible({ timeout: 10000 });
-
-    await page.goto('/checkout/success');
-    // Without session_id, error state is shown — but page renders without crash
-    await expect(page.locator('body')).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/buyer\/login/, { timeout: 10000 });
   });
 
   test('TC-23-04: オンボーディングルートは認証不要でアクセス可能', async ({ page }) => {
@@ -105,6 +107,7 @@ test.describe('TC-23: 横断的検証', () => {
   });
 
   test('TC-23-08: オンボーディングステップ間の遷移', async ({ page }) => {
+    await loginAsSeller(page);
     await page.goto('/seller/onboarding/profile');
     // Step 1: プロフィール入力 → Stripe
     const nameField = page.getByPlaceholder('例: 星野アイ');

@@ -103,14 +103,15 @@ test.describe('TC-18: Buyer Discord連携フロー', () => {
     });
 
     // ── TC-18-08: Discord結果ページのリトライリンク ──────────────────
-    test('TC-18-08: エラー状態からリトライリンクで確認ページに戻れる', async ({ page }) => {
+    test('TC-18-08: エラー状態からリトライリンクで確認ページへ遷移（未認証時はログインへ）', async ({ page }) => {
         await page.goto('/buyer/discord/result');
         await expect(page.getByText('連携に失敗しました')).toBeVisible({ timeout: 15000 });
 
         // 「もう一度連携する」リンク
         await page.getByRole('link', { name: /もう一度連携する/ }).click();
 
-        await expect(page).toHaveURL(/\/buyer\/discord\/confirm/, { timeout: 15000 });
+        // /buyer/discord/confirm requires auth → redirects to /buyer/login
+        await expect(page).toHaveURL(/\/buyer\/(discord\/confirm|login)/, { timeout: 15000 });
     });
 
     // ── TC-18-09: Discord結果ページの考えられる原因表示 ──────────────

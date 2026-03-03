@@ -25,7 +25,7 @@ export default function Purchase() {
 
             if (error) throw error;
             if (!data) throw new Error("プランが見つかりません。");
-            return data as any;
+            return data as { name?: string; description?: string; price?: number; currency?: string; interval?: string; seller_store_name?: string };
         },
         enabled: !!id,
     });
@@ -54,10 +54,10 @@ export default function Purchase() {
             } else {
                 throw new Error("購入URLの取得に失敗しました");
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             toast({
                 title: "エラー",
-                description: err.message || "決済の準備中にエラーが発生しました",
+                description: err instanceof Error ? err.message : "決済の準備中にエラーが発生しました",
                 variant: "destructive",
             });
         } finally {
@@ -77,7 +77,7 @@ export default function Purchase() {
         );
     }
 
-    const storeName = (plan.seller_profiles as any)?.store_name || "販売者";
+    const storeName = (plan as Record<string, unknown>).seller_store_name as string || "販売者";
 
     return (
         <Card className="w-full shadow-lg border-primary/20">

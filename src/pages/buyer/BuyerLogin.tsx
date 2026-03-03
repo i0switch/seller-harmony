@@ -35,8 +35,8 @@ export default function BuyerLogin() {
             if (signInError) throw signInError;
 
             navigate(returnTo);
-        } catch (err: any) {
-            setError(err.message || "認証に失敗しました。");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "認証に失敗しました。");
         } finally {
             setLoading(false);
         }

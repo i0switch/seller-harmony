@@ -15,7 +15,7 @@ interface AuthContextType {
     sellerOnboardingStep: OnboardingStep;
     setSellerOnboardingStep: (step: OnboardingStep) => void;
     sellerLogin: (email: string, pass: string) => Promise<{ error: { message: string } | null }>;
-    sellerSignup: (email: string, pass: string) => Promise<{ error: { message: string } | null }>;
+    sellerSignup: (email: string, pass: string, displayName?: string) => Promise<{ error: { message: string } | null }>;
 
     // Shared actions
     logout: () => Promise<void>;
@@ -32,22 +32,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [sellerOnboardingStep, setSellerOnboardingStep] = useState<OnboardingStep>("profile");
 
     useEffect(() => {
+        let subscription: { unsubscribe: () => void } | undefined;
+
         const initializeAuth = async () => {
             // Get initial session first
             const { data: { session: initialSession } } = await supabase.auth.getSession();
             await onAuthStateChange("INITIAL", initialSession);
 
             // Then listen for changes
-            const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
                 (_event, newSession) => onAuthStateChange(_event, newSession)
             );
-
-            return () => {
-                subscription.unsubscribe();
-            };
+            subscription = sub;
         };
 
         initializeAuth();
+
+        return () => {
+            subscription?.unsubscribe();
+        };
     }, []);
 
     const onAuthStateChange = async (event: string | null, currentSession: Session | null) => {
@@ -61,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .select('role')
                 .eq('id', currentSession.user.id)
                 .single();
-            setRole((data?.role as Role) || "buyer");
+            setRole((data?.role as Role) || null);
         } else {
             setRole(null);
         }
@@ -73,12 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await supabase.auth.signInWithPassword({ email, password: pass });
     };
 
-    const sellerSignup = async (email: string, pass: string) => {
+    const sellerSignup = async (email: string, pass: string, displayName?: string) => {
         return await supabase.auth.signUp({
             email,
             password: pass,
             options: {
-                data: { role: "seller" }
+                data: {
+                    role: "seller",
+                    ...(displayName ? { display_name: displayName.trim() } : {}),
+                }
             }
         });
     };

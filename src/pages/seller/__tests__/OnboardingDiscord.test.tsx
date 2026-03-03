@@ -14,6 +14,37 @@ vi.mock('@/integrations/supabase/client', () => ({
     },
 }));
 
+// Mock useSellerAuth to avoid AuthProvider dependency
+vi.mock('@/hooks/useSellerAuth', () => ({
+    useSellerAuth: () => ({
+        isOnboarded: false,
+        setOnboardingStep: vi.fn(),
+    }),
+}));
+
+// Mock AuthContext to prevent "useAuth must be used within AuthProvider" error
+vi.mock('@/contexts/AuthContext', () => ({
+    useAuth: () => ({
+        session: { user: { id: 'test-user-id' } },
+        user: { id: 'test-user-id' },
+        role: 'seller',
+        isLoading: false,
+        sellerOnboardingStep: 'discord',
+        setSellerOnboardingStep: vi.fn(),
+        sellerLogin: vi.fn(),
+        sellerSignup: vi.fn(),
+        logout: vi.fn(),
+    }),
+    AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+// Mock useToast
+vi.mock('@/hooks/use-toast', () => ({
+    useToast: () => ({
+        toast: vi.fn(),
+    }),
+}));
+
 describe('OnboardingDiscord Verification UI', () => {
     beforeEach(() => {
         vi.clearAllMocks();

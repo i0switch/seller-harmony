@@ -33,15 +33,14 @@ export default function OnboardingDiscord() {
   const { toast } = useToast();
   const { isOnboarded } = useSellerAuth();
   const [guildId, setGuildId] = useState("");
+  const [roleId, setRoleId] = useState("");
+  const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
 
   // Guard: redirect to dashboard if already onboarded
   if (isOnboarded) {
     return <Navigate to="/seller/dashboard" replace />;
   }
-
-  const [roleId, setRoleId] = useState("");
-  const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
-  const [validation, setValidation] = useState<ValidationResult | null>(null);
 
   const runValidation = async () => {
     if (!guildId.trim() || !roleId.trim()) {

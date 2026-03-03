@@ -33,10 +33,11 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
         await expect(page).toHaveURL(/\/seller\/(login|onboarding\/profile)/, { timeout: 15000 });
     });
 
-    test('TC-01-02c: Buyerカードから /member/me へ遷移', async ({ page }) => {
+    test('TC-01-02c: Buyerカードから /member/me へ遷移（未認証時はログインへリダイレクト）', async ({ page }) => {
         await page.goto('/');
         await page.getByText('🎫 Buyer / Member').click();
-        await expect(page).toHaveURL(/\/member\/me/, { timeout: 15000 });
+        // BuyerLayout auth guard: /member/me requires auth → redirect to /buyer/login
+        await expect(page).toHaveURL(/\/buyer\/login/, { timeout: 15000 });
     });
 
     // ── TC-01-03: 404ページ ──────────────────────────────────────────
@@ -102,9 +103,10 @@ test.describe('TC-01: ランディングページ・ルーティング・404', (
         await expect(page.locator('body')).not.toBeEmpty();
     });
 
-    test('TC-01-05b: /buyer/discord/confirm が表示される', async ({ page }) => {
+    test('TC-01-05b: /buyer/discord/confirm は認証必須（未認証時はログインへ）', async ({ page }) => {
         await page.goto('/buyer/discord/confirm');
-        await expect(page).toHaveURL(/\/buyer\/discord\/confirm/, { timeout: 15000 });
+        // BuyerLayout auth guard redirects to /buyer/login
+        await expect(page).toHaveURL(/\/buyer\/(discord\/confirm|login)/, { timeout: 15000 });
         await expect(page.locator('body')).not.toBeEmpty();
     });
 

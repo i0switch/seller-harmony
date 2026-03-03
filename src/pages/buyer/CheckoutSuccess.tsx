@@ -77,7 +77,9 @@ export default function CheckoutSuccess() {
             price: planData?.price || 0,
             currency: planData?.currency || "JPY",
             nextBillingDate: planData?.interval !== "one_time"
-              ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+              ? (membership.current_period_end
+                  ? new Date(membership.current_period_end).toISOString().split("T")[0]
+                  : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
               : undefined,
             guildName,
           });

@@ -131,8 +131,8 @@ export function useSellerAuth() {
     return await supabaseLogin(email, pass);
   };
 
-  const signup = async (email: string, pass: string) => {
-    const res = await supabaseSignup(email, pass);
+  const signup = async (email: string, pass: string, displayName?: string) => {
+    const res = await supabaseSignup(email, pass, displayName);
     if (!res.error) {
       setSellerOnboardingStep("profile");
     }

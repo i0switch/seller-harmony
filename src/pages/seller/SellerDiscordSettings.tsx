@@ -47,7 +47,7 @@ export default function SellerDiscordSettings() {
         guildId,
       });
       toast({ title: "設定を保存しました" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast({ title: "エラー", description: "設定の保存に失敗しました", variant: "destructive" });
     } finally {

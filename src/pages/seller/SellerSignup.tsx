@@ -28,7 +28,7 @@ export default function SellerSignup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    const res = await signup(email, password);
+    const res = await signup(email, password, name.trim());
     if (res.error) {
       setErrors({ ...errors, form: res.error.message });
       return;

@@ -1,3 +1,5 @@
+import { supabase } from "@/integrations/supabase/client";
+
 export class ApiError extends Error {
     constructor(
         public status: number,
@@ -12,13 +14,39 @@ export class ApiError extends Error {
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+/**
+ * Get current Supabase auth token for API requests.
+ * Returns Authorization header value or null.
+ */
+async function getAuthToken(): Promise<string | null> {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        return session?.access_token ? `Bearer ${session.access_token}` : null;
+    } catch {
+        return null;
+    }
+}
+
 async function request<T>(url: string, options: RequestInit): Promise<T> {
     try {
-        const response = await fetch(url, options);
+        // Inject auth token
+        const token = await getAuthToken();
+        const headers = new Headers(options.headers);
+        if (token && !headers.has('Authorization')) {
+            headers.set('Authorization', token);
+        }
+        headers.set('X-Requested-With', 'XMLHttpRequest');
+
+        const response = await fetch(url, { ...options, headers });
         if (!response.ok) {
             let errorData;
             try {
-                errorData = await response.json();
+                const contentType = response.headers.get('content-type');
+                if (contentType?.includes('application/json')) {
+                    errorData = await response.json();
+                } else {
+                    errorData = { detail: response.statusText };
+                }
             } catch {
                 errorData = { detail: response.statusText };
             }

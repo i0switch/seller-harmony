@@ -74,8 +74,8 @@ export default function SellerMemberDetail() {
       } else {
         toast({ title: `${action}しました`, description: `${member.name} に対して${action}を実行しました` });
       }
-    } catch (err: any) {
-      toast({ title: "エラー", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "エラー", description: err instanceof Error ? err.message : "操作に失敗しました", variant: "destructive" });
     }
   };
 

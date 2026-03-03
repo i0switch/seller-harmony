@@ -584,31 +584,48 @@ Deno.serve(async (req: Request) => {
       const dispute = event.data.object as Stripe.Dispute;
       const chargeId = dispute.charge as string;
       if (chargeId) {
-        // Update dispute_status; risk_flag stays true for manual review
-        // Find via same approach as dispute.created
+        // Trace charge → invoice → subscription to find the specific membership
+        let targetSubId: string | null = null;
         try {
-          const { data: allMemberships } = await supabaseAdmin
+          // Find a membership with risk_flag to get seller's Stripe account
+          const { data: flaggedMemberships } = await supabaseAdmin
             .from('memberships')
-            .select('stripe_subscription_id, seller_id')
+            .select('seller_id')
             .eq('risk_flag', true)
-            .limit(50);
+            .limit(1);
 
-          // Try each to find the right one
-          for (const mem of allMemberships || []) {
-            if (mem.stripe_subscription_id) {
-              await supabaseAdmin
-                .from('memberships')
-                .update({
-                  dispute_status: dispute.status,
-                  // Clear risk_flag only if dispute was won
-                  ...(dispute.status === 'won' ? { risk_flag: false } : {}),
-                })
-                .eq('stripe_subscription_id', mem.stripe_subscription_id)
-                .eq('risk_flag', true);
-            }
+          let stripeAcct: string | undefined;
+          const sellerMem = flaggedMemberships?.[0];
+          if (sellerMem?.seller_id) {
+            const { data: acct } = await supabaseAdmin
+              .from('stripe_connected_accounts')
+              .select('stripe_account_id')
+              .eq('seller_id', sellerMem.seller_id)
+              .single();
+            stripeAcct = acct?.stripe_account_id;
+          }
+
+          const charge = await stripe.charges.retrieve(chargeId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+          const invoiceId = charge.invoice as string | null;
+          if (invoiceId) {
+            const invoice = await stripe.invoices.retrieve(invoiceId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
+            targetSubId = invoice.subscription as string | null;
           }
         } catch (err) {
-          console.error('[stripe-webhook] Error processing dispute.closed:', err);
+          console.error('[stripe-webhook] Error resolving dispute.closed charge:', err);
+        }
+
+        if (targetSubId) {
+          await supabaseAdmin
+            .from('memberships')
+            .update({
+              dispute_status: dispute.status,
+              // Clear risk_flag only if dispute was won
+              ...(dispute.status === 'won' ? { risk_flag: false } : {}),
+            })
+            .eq('stripe_subscription_id', targetSubId);
+        } else {
+          console.warn('[stripe-webhook] Could not resolve membership for dispute.closed:', dispute.id);
         }
 
         await writeAuditLog('update', {
@@ -616,6 +633,7 @@ Deno.serve(async (req: Request) => {
           action_detail: 'dispute_closed',
           dispute_id: dispute.id,
           dispute_status: dispute.status,
+          resolved_subscription: targetSubId,
         }, event.id);
       }
     }

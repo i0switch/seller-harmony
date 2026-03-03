@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAsSeller } from './fixtures/auth.fixture';
 
 test.describe('TC-03: Seller オンボーディング全4ステップ', () => {
 
@@ -60,6 +61,7 @@ test.describe('TC-03: Seller オンボーディング全4ステップ', () => {
 
     // ── TC-03-03: ステップ0 → ステップ1 への遷移 ────────────────────
     test('TC-03-03: 有効な入力でStripeページに遷移する', async ({ page }) => {
+        await loginAsSeller(page);
         await page.goto('/seller/onboarding/profile');
         await expect(page.getByText('プロフィール設定')).toBeVisible({ timeout: 15000 });
 
@@ -320,6 +322,7 @@ test.describe('TC-03: Seller オンボーディング全4ステップ', () => {
 
     // ── TC-03-17: フルフロー — Profile → Stripe(スキップ) → Discord → Complete ─
     test('TC-03-17: オンボーディングフルフロー（スキップ含む）', async ({ page }) => {
+        await loginAsSeller(page);
         // Step 0: プロフィール
         await page.goto('/seller/onboarding/profile');
         await expect(page.getByText('プロフィール設定')).toBeVisible({ timeout: 15000 });
