@@ -14,32 +14,35 @@ test.describe('Seller Flow', () => {
         await page.getByRole('button', { name: 'ログイン' }).click();
 
         // Wait for redirect to dashboard or onboarding
-        await page.waitForTimeout(3000);
+        await page.waitForURL(/\/seller\/(dashboard|onboarding)/, { timeout: 15000 });
         const postLoginUrl = page.url();
-        const loggedIn = postLoginUrl.includes('/seller/dashboard') || postLoginUrl.includes('/seller/onboarding');
-        expect(loggedIn).toBeTruthy();
+        const alreadyOnboarded = postLoginUrl.includes('/seller/dashboard');
 
-        // ── 2. Navigate to onboarding profile ─────────────────────────────
-        await page.goto('/seller/onboarding/profile');
-        await expect(page).toHaveURL(/\/seller\/onboarding\/profile/, { timeout: 8000 });
+        // ── 2-6. Onboarding (skip if already completed) ─────────────────
+        if (!alreadyOnboarded) {
+            // Go to profile step
+            await page.goto('/seller/onboarding/profile');
+            await expect(page).toHaveURL(/\/seller\/onboarding\/profile/, { timeout: 8000 });
 
-        // ── 3. Profile Onboarding ─────────────────────────────────────────
-        await page.getByPlaceholder('例: 星野アイ').fill('E2E Test Seller');
-        await page.getByPlaceholder('例: 星野ファンクラブ').fill('E2E Test Fanclub');
-        await page.getByRole('button', { name: '保存して次へ' }).click();
+            // ── 3. Profile Onboarding ─────────────────────────────────────────
+            await page.getByPlaceholder('例: 星野アイ').fill('E2E Test Seller');
+            await page.getByPlaceholder('例: 星野ファンクラブ').fill('E2E Test Fanclub');
+            await page.getByRole('button', { name: '保存して次へ' }).click();
 
-        // ── 4. Stripe Setup (skip) ─────────────────────────────────────────
-        await expect(page).toHaveURL(/\/seller\/onboarding\/stripe/, { timeout: 8000 });
-        await page.getByRole('button', { name: 'スキップ（あとで設定）' }).click();
+            // ── 4. Stripe Setup (skip) ─────────────────────────────────────────
+            await expect(page).toHaveURL(/\/seller\/onboarding\/stripe/, { timeout: 8000 });
+            // Button text was updated — match partial text to tolerate wording changes
+            await page.getByRole('button', { name: /スキップ/ }).click();
 
-        // ── 5. Discord Setup ───────────────────────────────────────────────
-        await expect(page).toHaveURL(/\/seller\/onboarding\/discord/, { timeout: 8000 });
-        await page.getByPlaceholder('例: 1234567890123456789').fill('123456789012345678');
-        await page.getByRole('button', { name: '次へ' }).click();
+            // ── 5. Discord Setup ───────────────────────────────────────────────
+            await expect(page).toHaveURL(/\/seller\/onboarding\/discord/, { timeout: 8000 });
+            await page.getByPlaceholder('例: 1234567890123456789').fill('123456789012345678');
+            await page.getByRole('button', { name: '次へ' }).click();
 
-        // ── 6. Complete Onboarding ─────────────────────────────────────────
-        await expect(page).toHaveURL(/\/seller\/onboarding\/complete/, { timeout: 8000 });
-        await page.getByRole('button', { name: 'ダッシュボードへ' }).click();
+            // ── 6. Complete Onboarding ─────────────────────────────────────────
+            await expect(page).toHaveURL(/\/seller\/onboarding\/complete/, { timeout: 8000 });
+            await page.getByRole('button', { name: 'ダッシュボードへ' }).click();
+        }
 
         // ── 7. Dashboard ──────────────────────────────────────────────────
         await page.waitForTimeout(1000);

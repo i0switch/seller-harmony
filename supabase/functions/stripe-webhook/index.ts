@@ -196,11 +196,20 @@ Deno.serve(async (req: Request) => {
 
   // ─── Record event as pending ───
   try {
+    // Extract seller_id from event metadata for strict RLS (report 3-1 fix)
+    let eventSellerId: string | null = null;
+    try {
+      const obj = event.data?.object as Record<string, unknown>;
+      const metadata = obj?.metadata as Record<string, string> | undefined;
+      eventSellerId = metadata?.seller_id || null;
+    } catch { /* best-effort extraction */ }
+
     await supabaseAdmin.from('stripe_webhook_events').insert({
       stripe_event_id: event.id,
       event_type: event.type,
       payload: event as unknown as Record<string, unknown>,
       processing_status: 'pending',
+      ...(eventSellerId ? { seller_id: eventSellerId } : {}),
     });
 
     // ─── Handle checkout.session.completed ───
@@ -289,6 +298,11 @@ Deno.serve(async (req: Request) => {
               .eq('seller_id', mem.seller_id)
               .single();
             stripeAccountId = acct?.stripe_account_id;
+
+            // Backfill seller_id on webhook event for strict RLS
+            await supabaseAdmin.from('stripe_webhook_events')
+              .update({ seller_id: mem.seller_id })
+              .eq('stripe_event_id', event.id);
           }
 
           const sub = await stripe.subscriptions.retrieve(
@@ -364,6 +378,11 @@ Deno.serve(async (req: Request) => {
         }, event.id);
 
         if (updatedMembership) {
+          // Backfill seller_id on webhook event for strict RLS
+          await supabaseAdmin.from('stripe_webhook_events')
+            .update({ seller_id: updatedMembership.seller_id })
+            .eq('stripe_event_id', event.id);
+
           if (!updatedMembership.manual_override) {
             await removeDiscordRole(updatedMembership.buyer_id, updatedMembership.seller_id, updatedMembership.plan_id);
           } else {
@@ -408,6 +427,11 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (membership) {
+        // Backfill seller_id on webhook event for strict RLS
+        await supabaseAdmin.from('stripe_webhook_events')
+          .update({ seller_id: membership.seller_id })
+          .eq('stripe_event_id', event.id);
+
         await supabaseAdmin
           .from('memberships')
           .update({
@@ -546,6 +570,10 @@ Deno.serve(async (req: Request) => {
               const charge = await stripe.charges.retrieve(chargeId, { stripeAccount: acct.stripe_account_id });
               // Found the correct seller
               resolvedStripeAcct = acct.stripe_account_id;
+              // Backfill seller_id on webhook event for strict RLS
+              await supabaseAdmin.from('stripe_webhook_events')
+                .update({ seller_id: acct.seller_id })
+                .eq('stripe_event_id', event.id);
               const invoiceId = charge.invoice as string | null;
               if (invoiceId) {
                 const invoice = await stripe.invoices.retrieve(invoiceId, { stripeAccount: acct.stripe_account_id });

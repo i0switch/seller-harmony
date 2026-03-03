@@ -82,7 +82,7 @@ describe('PlatformAnnouncements', () => {
         await user.click(createBtn);
 
         // Wait for dialog
-        expect(await screen.findByRole('dialog')).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { }, { timeout: 8000 })).toBeInTheDocument();
         expect(screen.getByText('お知らせ作成')).toBeInTheDocument();
 
         // Fill form

@@ -2,18 +2,33 @@
  * Real authentication helpers for E2E tests.
  * Uses Supabase Auth API to obtain real JWT tokens and injects sessions.
  * NO MOCKS — all auth is real.
+ *
+ * Credentials are loaded from environment variables.
+ * Copy `.env.test.example` to `.env.test` and fill in your values.
+ * Playwright config must load this file via `dotenv`.
  */
 import { Page } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load .env.test from project root
+dotenv.config({ path: path.resolve(__dirname, '../../../.env.test') });
 
 const SUPABASE_URL = 'https://xaqzuevdmeqxntvhamce.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhcXp1ZXZkbWVxeG50dmhhbWNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwNDAxODAsImV4cCI6MjA4NzYxNjE4MH0.p_Gfy9YDtGCnmqa0UjqU0LMVUXS6xDl9-sRipF0xfIU';
 
-// ── Test account credentials ────────────────────────────────────
-export const SELLER_EMAIL = 'i0switch.g+test01@gmail.com';
-export const BUYER_EMAIL = 'i0switch.g+buyer01@gmail.com';
-export const ADMIN_EMAIL = 'i0switch.g@gmail.com';
-export const TEST_PASSWORD = 'pasowota427314s';
+// ── Test account credentials (from .env.test) ───────────────────
+function requireEnv(key: string, fallback?: string): string {
+  const v = process.env[key] ?? fallback;
+  if (!v) throw new Error(`Missing env var ${key}. Copy .env.test.example → .env.test`);
+  return v;
+}
+
+export const SELLER_EMAIL = requireEnv('TEST_SELLER_EMAIL');
+export const BUYER_EMAIL  = requireEnv('TEST_BUYER_EMAIL');
+export const ADMIN_EMAIL  = requireEnv('TEST_ADMIN_EMAIL');
+export const TEST_PASSWORD = requireEnv('TEST_PASSWORD');
 
 /**
  * Authenticate with Supabase Auth API and inject the session

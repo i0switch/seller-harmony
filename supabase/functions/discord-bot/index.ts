@@ -232,14 +232,22 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!guildId) {
-        const { data: serverBySeller } = await supabaseAdmin
+        // Fallback: only use seller's server if they have exactly one
+        // Multiple servers → ambiguous, return error instead of guessing
+        const { data: serversBySeller } = await supabaseAdmin
           .from('discord_servers')
           .select('guild_id')
-          .eq('seller_id', plan.seller_id)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        guildId = serverBySeller?.guild_id ?? '';
+          .eq('seller_id', plan.seller_id);
+
+        if (serversBySeller && serversBySeller.length === 1) {
+          guildId = serversBySeller[0].guild_id ?? '';
+          console.warn(`[discord-bot] Fallback: plan ${plan.id} has no discord_server_id, using seller's only server`);
+        } else if (serversBySeller && serversBySeller.length > 1) {
+          return new Response(
+            JSON.stringify({ status: 'failed', reason: 'ambiguous_server', detail: 'Plan has no discord_server_id and seller has multiple servers. Please configure the plan with a specific server.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       if (!guildId) {

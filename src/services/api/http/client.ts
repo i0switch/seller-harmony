@@ -14,6 +14,20 @@ export class ApiError extends Error {
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// Fail-fast: Warn if Platform API URL is localhost in a deployed environment
+if (
+  !import.meta.env.VITE_API_URL &&
+  typeof window !== 'undefined' &&
+  !window.location.hostname.includes('localhost') &&
+  !window.location.hostname.includes('127.0.0.1')
+) {
+  console.error(
+    '[Platform API] VITE_API_URL is not configured. ' +
+    'Platform admin features will fail because API defaults to localhost:8000. ' +
+    'Set VITE_API_URL environment variable to the deployed backend URL.'
+  );
+}
+
 /**
  * Get current Supabase auth token for API requests.
  * Returns Authorization header value or null.

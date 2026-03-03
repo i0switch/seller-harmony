@@ -1,0 +1,38 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "QA: Hosted Auto (dry-run)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"qa:vscode:auto:dry"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "QA: Hosted Auto",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"qa:vscode:auto"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "QA: Hosted Auto (3x)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"qa:vscode:auto:3x"
+			],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}
