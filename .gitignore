@@ -15,6 +15,7 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/tasks.json
 .idea
 .DS_Store
 *.suo
@@ -30,18 +31,23 @@ dist-ssr
 test-results/
 playwright-report/
 playwright-results.txt
+.playwright-mcp/
+
+# Lint output files
 lint_output.txt
 lint_results*.txt
 
-# Agent skill files
+# Agent / AI skill files (development-only)
 .agent/
+chatgpt/
 
 # QA automation logs
 .qa-automation/
 
-# Python virtual environment
+# Python virtual environment & cache
 .venv/
 __pycache__/
+.pytest_cache/
 
 # Environment files (secrets)
 .env
@@ -50,3 +56,18 @@ __pycache__/
 backend/.env
 backend/.env.*
 !backend/.env.example
+
+# Dev-only test scripts
+test-login.js
+test-signup.js
+
+# Generated reports & logs (not source)
+report*.md
+test-report.md
+seller-harmony-test-plan.md
+現状分析_タスク管理.md
+e2e_*.log
+test-out*.log
+build*.log
+lint*.log
+patched_*.log
