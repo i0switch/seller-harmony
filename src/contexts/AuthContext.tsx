@@ -51,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const onAuthStateChange = async (event: string | null, currentSession: Session | null) => {
-        console.log(`AuthContext: onAuthStateChange event: ${event}`);
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
@@ -64,7 +63,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .single();
             setRole((data?.role as Role) || "buyer");
         } else {
-            console.log("AuthContext: No session user.");
             setRole(null);
         }
 

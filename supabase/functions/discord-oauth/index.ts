@@ -44,7 +44,6 @@ Deno.serve(async (req: Request) => {
 
     // Allowed redirect URI patterns (open-redirect prevention)
     const ALLOWED_REDIRECT_PATTERNS = [
-      /^https?:\/\/localhost(:\d+)?\/buyer\/discord\/result$/,
       /^https:\/\/.*\.lovable\.app\/buyer\/discord\/result$/,
       /^https:\/\/member-bridge-flow\.lovable\.app\/buyer\/discord\/result$/,
       /^https:\/\/.*\.supabase\.co\/.*$/,

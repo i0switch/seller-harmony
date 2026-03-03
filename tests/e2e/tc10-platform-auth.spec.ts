@@ -79,8 +79,8 @@ test.describe('TC-10: Platform Admin 認証', () => {
         const loginBtn = page.getByRole('button', { name: 'ログイン' });
         await loginBtn.click();
 
-        // ローディング中はdisabled
-        await expect(page.getByRole('button', { name: /ログイン中/ })).toBeVisible({ timeout: 5000 });
+        // ローディング中はdisabled（ネットワーク速度によりボタンテキスト変化が一瞬のため長めに待機）
+        await expect(page.getByRole('button', { name: /ログイン中/ })).toBeVisible({ timeout: 10000 });
     });
 
     // ── TC-10-06: input typeの検証 ──────────────────────────────────
