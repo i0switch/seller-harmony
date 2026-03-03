@@ -1,5 +1,5 @@
 /// <reference lib="deno.ns" />
-import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN');
 if (!ALLOWED_ORIGIN) {

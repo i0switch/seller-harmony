@@ -1,6 +1,6 @@
 /// <reference lib="deno.ns" />
-import Stripe from 'npm:stripe@^14.0.0';
-import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
+import Stripe from 'https://esm.sh/stripe@14.25.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';

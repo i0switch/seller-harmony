@@ -1,6 +1,6 @@
 /// <reference lib="deno.ns" />
-import Stripe from 'npm:stripe@^14.0.0';
-import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
+import Stripe from 'https://esm.sh/stripe@14.25.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN');
 if (!ALLOWED_ORIGIN) {

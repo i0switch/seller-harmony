@@ -41,6 +41,7 @@ describe('SellerLayout', () => {
             getNextStep: vi.fn(),
             canAccessStep: vi.fn(),
             signup: vi.fn(),
+            refreshOnboardingStep: vi.fn(),
         });
 
         renderLayout();
@@ -60,6 +61,7 @@ describe('SellerLayout', () => {
             getNextStep: vi.fn(),
             canAccessStep: vi.fn(),
             signup: vi.fn(),
+            refreshOnboardingStep: vi.fn(),
         });
 
         renderLayout();
@@ -79,6 +81,7 @@ describe('SellerLayout', () => {
             getNextStep: vi.fn(),
             canAccessStep: vi.fn(),
             signup: vi.fn(),
+            refreshOnboardingStep: vi.fn(),
         });
 
         renderLayout();

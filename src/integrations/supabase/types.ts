@@ -159,6 +159,7 @@ export type Database = {
         Row: {
           buyer_id: string
           created_at: string
+          current_period_end: string | null
           dispute_status: string | null
           entitlement_ends_at: string | null
           final_payment_failure_at: string | null
@@ -179,6 +180,7 @@ export type Database = {
         Insert: {
           buyer_id: string
           created_at?: string
+          current_period_end?: string | null
           dispute_status?: string | null
           entitlement_ends_at?: string | null
           final_payment_failure_at?: string | null
@@ -199,6 +201,7 @@ export type Database = {
         Update: {
           buyer_id?: string
           created_at?: string
+          current_period_end?: string | null
           dispute_status?: string | null
           entitlement_ends_at?: string | null
           final_payment_failure_at?: string | null
@@ -554,6 +557,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      expire_grace_period_memberships: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["user_role"]
