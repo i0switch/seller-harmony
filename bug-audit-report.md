@@ -87,13 +87,13 @@
 | **深刻度** | 🟡 中 |
 | **種別** | セキュリティ（オープンリダイレクト） |
 | **関連ファイル** | `src/pages/buyer/BuyerLogin.tsx:11,37` |
-| **根拠** | L11: `const returnTo = searchParams.get("returnTo") \|\| "/member/me"` で外部URLも受け入れ可能。L37: `navigate(returnTo)` で無制限にリダイレクト。React Router の `navigate()` は外部URLへのリダイレクトを行わないが、`//evil.com` のようなプロトコル相対URLは通る可能性がある。 |
-| **再現手順** | `/buyer/login?returnTo=//evil.com` にアクセスし、ログイン成功後の遷移先を確認 |
-| **実際の挙動** | React Router の `navigate` が相対URLとして処理するため、外部サイトへの直接リダイレクトは発生しないが、フィッシング用の内部パスは設定可能 |
-| **期待挙動** | `returnTo` が内部パス（`/` 始まり、ドメイン無し）であることを検証する |
+| **根拠** | L11: `const returnTo = searchParams.get("returnTo") \|\| "/member/me"` で外部URLも受け入れ可能。L37: `navigate(returnTo)` で無制限にリダイレクト。React Router v6 の `navigate()` はクライアントサイドルーティングのため `https://evil.com` のような完全URLへの外部リダイレクトは発生しない。ただし `returnTo` に任意の内部パス（例: `/platform/dashboard`）を指定可能であり、ロール境界を跨ぐ意図しないナビゲーションが発生し得る。また将来的に `window.location.href = returnTo` 等へのリファクタ時にオープンリダイレクトとなるリスクがある。 |
+| **再現手順** | `/buyer/login?returnTo=/platform/dashboard` にアクセスし、ログイン成功後の遷移先を確認 |
+| **実際の挙動** | React Router v6 の `navigate()` は内部ルーティングのみ処理するため外部リダイレクトは発生しない。ただし任意の内部パスへの遷移は可能（ロール境界の問題）。 |
+| **期待挙動** | `returnTo` が許可リスト内の buyer 向けパス（`/member/me`, `/p/*`, `/buyer/*`, `/checkout/*`）であることを検証する |
 | **想定原因** | 入力値のサニタイズが不足している |
-| **追加で確認すべきこと** | React Router v6 の `navigate()` がプロトコル相対URLをどう処理するか実地検証 |
-| **修正方針の概要** | `returnTo` が `/` で始まり `//` で始まらないことを確認するバリデーションを追加。 |
+| **追加で確認すべきこと** | なし（React Router v6 では外部リダイレクトにならないことは確認済み） |
+| **修正方針の概要** | `returnTo` が buyer 向けの許可リスト内のパスであることを確認するバリデーションを追加。 |
 
 ---
 
