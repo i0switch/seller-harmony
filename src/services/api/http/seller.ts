@@ -16,4 +16,7 @@ export const sellerApi: ISellerApi = {
     runCrosscheck: () => httpClient.post<{ jobId: string }>("/api/seller/crosscheck/run"),
     getWebhooks: (params) => httpClient.get<PaginatedResponse<PlatformWebhookEvent>>("/api/seller/webhooks", params as Record<string, string | number | boolean>),
     validateDiscord: (guildId, roleId) => httpClient.post<DiscordValidationResult>("/api/seller/discord/validate", { guildId, roleId }),
+    saveDiscordSettings: (settings) => httpClient.post<void>("/api/seller/discord/settings", settings),
+    overrideMember: (memberId) => httpClient.post<void>(`/api/seller/members/${memberId}/override`),
+    retryDiscordRole: (memberId) => httpClient.post<void>(`/api/seller/members/${memberId}/retry-role`),
 };

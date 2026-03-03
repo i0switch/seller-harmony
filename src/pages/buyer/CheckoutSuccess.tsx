@@ -21,15 +21,7 @@ export default function CheckoutSuccess() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const [showLater, setShowLater] = useState(false);
-  const [plan, setPlan] = useState<CheckoutData | null>({
-    planName: "プレミアム会員",
-    sellerName: "販売者",
-    planType: "subscription",
-    price: 2980,
-    currency: "JPY",
-    nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    guildName: "限定",
-  });
+  const [plan, setPlan] = useState<CheckoutData | null>(null);
   const [loading, setLoading] = useState(true);
   const [warning, setWarning] = useState<string | null>(null);
 
