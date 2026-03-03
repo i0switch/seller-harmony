@@ -39,6 +39,45 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
+function sanitizeStripeEventPayload(event: Stripe.Event): Record<string, unknown> {
+  const obj = (event.data?.object ?? {}) as Record<string, unknown>;
+  const metadata = (obj.metadata ?? {}) as Record<string, unknown>;
+  const sanitizedMetadata: Record<string, string> = {};
+
+  const sellerId = typeof metadata.seller_id === 'string' ? metadata.seller_id : null;
+  const buyerId = typeof metadata.buyer_id === 'string' ? metadata.buyer_id : null;
+  const planId = typeof metadata.plan_id === 'string' ? metadata.plan_id : null;
+
+  if (sellerId) sanitizedMetadata.seller_id = sellerId;
+  if (buyerId) sanitizedMetadata.buyer_id = buyerId;
+  if (planId) sanitizedMetadata.plan_id = planId;
+
+  return {
+    id: event.id,
+    type: event.type,
+    account: event.account ?? null,
+    created: event.created,
+    livemode: event.livemode,
+    api_version: event.api_version ?? null,
+    request: event.request
+      ? {
+          id: event.request.id ?? null,
+          idempotency_key: event.request.idempotency_key ?? null,
+        }
+      : null,
+    data: {
+      object: {
+        id: typeof obj.id === 'string' ? obj.id : null,
+        object: typeof obj.object === 'string' ? obj.object : null,
+        subscription: typeof obj.subscription === 'string' ? obj.subscription : null,
+        customer: typeof obj.customer === 'string' ? obj.customer : null,
+        invoice: typeof obj.invoice === 'string' ? obj.invoice : null,
+        metadata: sanitizedMetadata,
+      },
+    },
+  };
+}
+
 /**
  * Assign a Discord role to a buyer after successful payment.
  */
@@ -231,7 +270,7 @@ Deno.serve(async (req: Request) => {
     await supabaseAdmin.from('stripe_webhook_events').insert({
       stripe_event_id: event.id,
       event_type: event.type,
-      payload: event as unknown as Record<string, unknown>,
+      payload: sanitizeStripeEventPayload(event),
       processing_status: 'pending',
       ...(eventSellerId ? { seller_id: eventSellerId } : {}),
     });

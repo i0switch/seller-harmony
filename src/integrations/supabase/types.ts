@@ -557,7 +557,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      seller_memberships_public: {
+        Row: {
+          buyer_id: string
+          created_at: string
+          id: string
+          plan_id: string
+          seller_id: string
+          status: Database["public"]["Enums"]["membership_status"]
+          updated_at: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memberships_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seller_webhook_events_public: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          processing_status: string
+          seller_id: string | null
+          stripe_event_id: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       expire_grace_period_memberships: { Args: never; Returns: undefined }

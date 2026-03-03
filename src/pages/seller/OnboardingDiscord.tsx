@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { MessageCircle, ArrowLeft, CheckCircle, XCircle, Loader2, AlertTriangle 
 import { OnboardingShell } from "@/components/OnboardingStepIndicator";
 import { useToast } from "@/hooks/use-toast";
 import { useSellerAuth } from "@/hooks/useSellerAuth";
+import { sellerApi } from "@/services/api";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -36,6 +37,23 @@ export default function OnboardingDiscord() {
   const [roleId, setRoleId] = useState("");
   const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [isSavingNext, setIsSavingNext] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    sellerApi.getDiscordSettings().then((settings) => {
+      if (!mounted) return;
+      setGuildId(settings.guildId || "");
+      setRoleId(settings.defaultRoleId || "");
+    }).catch(() => {
+      // Ignore restore failure and allow manual input
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Guard: redirect to dashboard if already onboarded
   if (isOnboarded) {
@@ -93,6 +111,34 @@ export default function OnboardingDiscord() {
       <span className={ok ? "" : "text-destructive"}>{label}</span>
     </div>
   );
+
+  const handleNext = async () => {
+    if (!guildId.trim() || !roleId.trim()) {
+      toast({
+        title: "入力エラー",
+        description: "次へ進む前にサーバーIDと役割(Role)IDを入力してください",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingNext(true);
+    try {
+      await sellerApi.saveDiscordSettings({
+        guildId: guildId.trim(),
+        defaultRoleId: roleId.trim(),
+      });
+      navigate("/seller/onboarding/complete");
+    } catch (err: unknown) {
+      toast({
+        title: "保存に失敗しました",
+        description: err instanceof Error ? err.message : "Discord設定を保存できませんでした",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingNext(false);
+    }
+  };
 
   return (
     <OnboardingShell step={2}>
@@ -169,8 +215,8 @@ export default function OnboardingDiscord() {
         <Button variant="outline" onClick={() => navigate("/seller/onboarding/stripe")} className="flex-1">
           <ArrowLeft className="h-4 w-4 mr-1" /> 戻る
         </Button>
-        <Button onClick={() => navigate("/seller/onboarding/complete")} className="flex-1">
-          次へ
+        <Button onClick={handleNext} className="flex-1" disabled={isSavingNext}>
+          {isSavingNext ? "保存中..." : "次へ"}
         </Button>
       </div>
     </OnboardingShell>

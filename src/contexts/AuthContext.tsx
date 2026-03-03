@@ -31,6 +31,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const [sellerOnboardingStep, setSellerOnboardingStep] = useState<OnboardingStep>("profile");
 
+    const sanitizeAuthError = (message?: string) => {
+        if (!message) return "認証に失敗しました。時間をおいて再度お試しください。";
+
+        const normalized = message.toLowerCase();
+        if (
+            normalized.includes("invalid login credentials") ||
+            normalized.includes("user not found") ||
+            normalized.includes("email not confirmed") ||
+            normalized.includes("already registered") ||
+            normalized.includes("already been registered")
+        ) {
+            return "入力内容を確認のうえ、再度お試しください。";
+        }
+
+        return "認証に失敗しました。時間をおいて再度お試しください。";
+    };
+
     useEffect(() => {
         let subscription: { unsubscribe: () => void } | undefined;
 
@@ -73,11 +90,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const sellerLogin = async (email: string, pass: string) => {
-        return await supabase.auth.signInWithPassword({ email, password: pass });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+        if (error) {
+            return { error: { message: sanitizeAuthError(error.message) } };
+        }
+        return { data, error: null };
     };
 
     const sellerSignup = async (email: string, pass: string, displayName?: string) => {
-        return await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email,
             password: pass,
             options: {
@@ -87,6 +108,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
         });
+
+        if (error) {
+            return { error: { message: sanitizeAuthError(error.message) } };
+        }
+
+        return { data, error: null };
     };
 
     const logout = async () => {

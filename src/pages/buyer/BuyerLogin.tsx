@@ -13,7 +13,26 @@ export default function BuyerLogin() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [message, setMessage] = useState("");
     const [loading, setLoading] = useState(false);
+
+    const sanitizeAuthError = (input: unknown) => {
+        const fallback = "入力内容を確認のうえ、再度お試しください。";
+        if (!(input instanceof Error) || !input.message) return fallback;
+
+        const normalized = input.message.toLowerCase();
+        if (
+            normalized.includes("invalid login credentials") ||
+            normalized.includes("user not found") ||
+            normalized.includes("already registered") ||
+            normalized.includes("already been registered") ||
+            normalized.includes("email not confirmed")
+        ) {
+            return fallback;
+        }
+
+        return "認証に失敗しました。時間をおいて再度お試しください。";
+    };
 
     const handleAuth = async (e: React.FormEvent, isSignUp: boolean) => {
         e.preventDefault();
@@ -23,12 +42,20 @@ export default function BuyerLogin() {
         }
         setLoading(true);
         setError("");
+        setMessage("");
 
         try {
             if (isSignUp) {
-                const { error: signUpError } = await supabase.auth.signUp({ email, password });
+                const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
                 if (signUpError) throw signUpError;
-                // Proceed to login if sign up succeeds without email confirmation required
+
+                if (!signUpData.session) {
+                    setMessage("確認メールを送信しました。メール内リンクを開いてからログインしてください。");
+                    return;
+                }
+
+                navigate(returnTo);
+                return;
             }
 
             const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -36,7 +63,7 @@ export default function BuyerLogin() {
 
             navigate(returnTo);
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "認証に失敗しました。");
+            setError(sanitizeAuthError(err));
         } finally {
             setLoading(false);
         }
@@ -51,6 +78,7 @@ export default function BuyerLogin() {
                 </div>
                 <form className="space-y-4">
                     {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">{error}</p>}
+                    {message && <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3">{message}</p>}
                     <div className="space-y-2">
                         <Label htmlFor="email">メールアドレス</Label>
                         <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />

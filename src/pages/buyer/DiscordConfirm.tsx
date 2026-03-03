@@ -10,6 +10,12 @@ export default function DiscordConfirm() {
   const [discordUser, setDiscordUser] = useState<{ username: string; avatar: string; id: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const maskDiscordId = (value: string) => {
+    if (!value) return "";
+    if (value.length <= 4) return "****";
+    return `****${value.slice(-4)}`;
+  };
+
   useEffect(() => {
     async function fetchDiscordIdentity() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -86,7 +92,7 @@ export default function DiscordConfirm() {
               <p className="font-bold text-lg">{discordUser.username}</p>
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <User className="h-3 w-3" />
-                ID: {discordUser.id}
+                ID: {maskDiscordId(discordUser.id)}
               </p>
               <Badge variant="default" className="mt-1">OAuth認証済み</Badge>
             </div>

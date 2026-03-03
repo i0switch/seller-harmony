@@ -109,13 +109,15 @@ Deno.serve(async (req: Request) => {
         .from('memberships')
         .select('id, stripe_subscription_id, seller_id')
         .eq('buyer_id', user.id)
-        .not('stripe_subscription_id', 'is', null)
         .in('status', ['active', 'grace_period', 'cancel_scheduled', 'payment_failed', 'pending_discord']);
 
       const results: { id: string; canceled: boolean; error?: string }[] = [];
 
       for (const m of (memberships || [])) {
-        if (!m.stripe_subscription_id) continue;
+        if (!m.stripe_subscription_id) {
+          results.push({ id: m.id, canceled: true });
+          continue;
+        }
         try {
           // Get seller's Stripe Connect account
           const { data: acct } = await supabaseAdmin
@@ -135,6 +137,20 @@ Deno.serve(async (req: Request) => {
           results.push({ id: m.id, canceled: false, error: msg });
         }
       }
+
+      const failed = results.filter((r) => !r.canceled);
+      if (failed.length > 0) {
+        return new Response(JSON.stringify({ success: false, error: 'subscription_cancel_failed', results: failed }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      await supabaseAdmin
+        .from('memberships')
+        .update({ status: 'canceled' })
+        .eq('buyer_id', user.id)
+        .in('status', ['active', 'grace_period', 'cancel_scheduled', 'payment_failed', 'pending_discord']);
 
       return new Response(JSON.stringify({ success: true, results }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

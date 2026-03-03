@@ -74,11 +74,6 @@ function toSellerBillingStatus(status: string): SellerMember["billingStatus"] {
   return "active";
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getPayloadSellerId(payload: any): string | null {
-  return payload?.data?.object?.metadata?.seller_id ?? null;
-}
-
 // ─── implementation ─────────────────────────────────────────────────
 
 export const sellerApi: ISellerApi = {
@@ -89,9 +84,8 @@ export const sellerApi: ISellerApi = {
     if (!user) throw new Error("Not authenticated");
 
     const { count: totalMembers } = await supabase
-      .from("memberships")
-      .select("*", { count: "exact", head: true })
-      .eq("seller_id", user.id)
+      .from("seller_memberships_public")
+      .select("id", { count: "exact", head: true })
       .eq("status", "active");
 
     const { data: plans } = await supabase
@@ -104,9 +98,8 @@ export const sellerApi: ISellerApi = {
 
     // Calculate MRR: sum of (active_member_count * plan_price) for each plan
     const { data: activeMemberships } = await supabase
-      .from("memberships")
+      .from("seller_memberships_public")
       .select("plan_id")
-      .eq("seller_id", user.id)
       .in("status", ["active", "grace_period", "cancel_scheduled"]);
 
     let mrr = 0;
@@ -187,7 +180,7 @@ export const sellerApi: ISellerApi = {
       guildName: ds.guild_name ?? "",
       botConnected: ds.bot_installed ?? false,
       botHasManageRoles: ds.bot_permission_status === "ok",
-      defaultRoleId: "",
+      defaultRoleId: (ds as { default_role_id?: string | null }).default_role_id ?? "",
       defaultRoleName: "",
       lastVerifiedAt: ds.updated_at ?? "",
       verificationHistory: [] as DiscordVerificationEntry[],
@@ -203,6 +196,7 @@ export const sellerApi: ISellerApi = {
     if (settings.guildId !== undefined) updates.guild_id = settings.guildId;
     if (settings.botConnected !== undefined) updates.bot_installed = settings.botConnected;
     if (settings.botHasManageRoles !== undefined) updates.bot_permission_status = settings.botHasManageRoles ? 'ok' : 'unknown';
+    if (settings.defaultRoleId !== undefined) updates.default_role_id = settings.defaultRoleId;
 
     const { error } = await supabase
       .from("discord_servers")
@@ -320,9 +314,8 @@ export const sellerApi: ISellerApi = {
     const to = from + pageSize - 1;
 
     let query = supabase
-      .from("memberships")
-      .select("*, plans(name)", { count: "exact" })
-      .eq("seller_id", user.id)
+      .from("seller_memberships_public")
+      .select("id, buyer_id, plan_id, status, created_at, updated_at", { count: "exact" })
       .range(from, to)
       .order("created_at", { ascending: false });
 
@@ -333,13 +326,22 @@ export const sellerApi: ISellerApi = {
     const { data, count, error } = await query;
     if (error) throw new Error(error.message);
 
+    const planIds = [...new Set((data ?? []).map((row) => row.plan_id))];
+    const { data: plans } = planIds.length > 0
+      ? await supabase
+        .from("plans")
+        .select("id, name")
+        .in("id", planIds)
+      : { data: [] };
+    const planNameMap = new Map((plans ?? []).map((plan) => [plan.id, plan.name]));
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: SellerMember[] = (data ?? []).map((r: any) => ({
       id: r.id,
       name: r.buyer_id ?? "",
       email: r.buyer_id ?? "",
       planId: r.plan_id ?? "",
-      planName: r.plans?.name ?? "",
+      planName: planNameMap.get(r.plan_id) ?? "",
       billingStatus: r.status ?? "active",
       discordUsername: "",
       discordId: "",
@@ -358,20 +360,25 @@ export const sellerApi: ISellerApi = {
     if (!user) throw new Error("Not authenticated");
 
     const { data, error } = await supabase
-      .from("memberships")
-      .select("*, plans(name)")
+      .from("seller_memberships_public")
+      .select("id, buyer_id, plan_id, status, created_at, updated_at")
       .eq("id", id)
-      .eq("seller_id", user.id)
       .maybeSingle();
 
     if (error || !data) return null;
+
+    const { data: plan } = await supabase
+      .from("plans")
+      .select("name")
+      .eq("id", data.plan_id)
+      .maybeSingle();
 
     return {
       id: data.id,
       name: data.buyer_id ?? "",
       email: data.buyer_id ?? "",
       planId: data.plan_id ?? "",
-      planName: (data.plans as unknown as { name: string })?.name ?? "",
+      planName: plan?.name ?? "",
       billingStatus: data.status ?? "active",
       discordUsername: "",
       discordId: "",
@@ -390,10 +397,9 @@ export const sellerApi: ISellerApi = {
     const events: TimelineEvent[] = [];
 
     const { data: membership } = await supabase
-      .from("memberships")
-      .select("id, status, created_at, updated_at, stripe_subscription_id")
+      .from("seller_memberships_public")
+      .select("id, status, created_at, updated_at")
       .eq("id", memberId)
-      .eq("seller_id", user.id)
       .maybeSingle();
 
     if (!membership) return [];
@@ -431,28 +437,6 @@ export const sellerApi: ISellerApi = {
       });
     });
 
-    if (membership.stripe_subscription_id) {
-      const { data: webhookRows } = await supabase
-        .from("stripe_webhook_events")
-        .select("id, event_type, processing_status, error_message, created_at, payload")
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (webhookRows ?? []).forEach((row: any) => {
-        const subId = row?.payload?.data?.object?.subscription;
-        if (subId && subId === membership.stripe_subscription_id) {
-          events.push({
-            id: `wh:${row.id}`,
-            source: "webhook",
-            event: row.event_type,
-            detail: row.error_message ? `処理失敗: ${row.error_message}` : `処理状態: ${row.processing_status}`,
-            timestamp: row.created_at,
-          });
-        }
-      });
-    }
-
     return events.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
   },
 
@@ -462,14 +446,22 @@ export const sellerApi: ISellerApi = {
     if (!user) throw new Error("Not authenticated");
 
     const { data: memberships, error } = await supabase
-      .from("memberships")
-      .select("id, buyer_id, status, updated_at, plan_id, plans(name)")
-      .eq("seller_id", user.id)
+      .from("seller_memberships_public")
+      .select("id, buyer_id, status, updated_at, plan_id")
       .order("updated_at", { ascending: false })
       .limit(200);
 
     if (error) throw new Error(error.message);
     if (!memberships?.length) return [];
+
+    const planIds = [...new Set(memberships.map((row) => row.plan_id))];
+    const { data: plans } = planIds.length > 0
+      ? await supabase
+        .from("plans")
+        .select("id, name")
+        .in("id", planIds)
+      : { data: [] };
+    const planNameMap = new Map((plans ?? []).map((plan) => [plan.id, plan.name]));
 
     const buyerIds = [...new Set(memberships.map((m) => m.buyer_id))];
     const membershipIds = memberships.map((m) => m.id);
@@ -536,7 +528,7 @@ export const sellerApi: ISellerApi = {
         memberId: m.id,
         memberName: m.buyer_id,
         discordUsername,
-        planName: m.plans?.name ?? "",
+        planName: planNameMap.get(m.plan_id) ?? "",
         billingStatus: bill,
         roleStatus,
         judgment,
@@ -573,10 +565,9 @@ export const sellerApi: ISellerApi = {
     if (!user) throw new Error("Not authenticated");
 
     const { data: member, error: fetchErr } = await supabase
-      .from("memberships")
+      .from("seller_memberships_public")
       .select("buyer_id, seller_id, plan_id")
       .eq("id", memberId)
-      .eq("seller_id", user.id)
       .single();
 
     if (fetchErr || !member) throw new Error("Member not found");
@@ -604,10 +595,10 @@ export const sellerApi: ISellerApi = {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 10;
 
-    // Use RLS-based query — the seller-scoped policy filters by seller_id in payload
+    // Use minimal seller-facing view (raw payload is not exposed to sellers)
     let query = supabase
-      .from("stripe_webhook_events")
-      .select("*", { count: "exact" })
+      .from("seller_webhook_events_public")
+      .select("id, event_type, processing_status, error_message, created_at, stripe_event_id", { count: "exact" })
       .order("created_at", { ascending: false });
 
     if (params?.status && params.status !== "all") {
@@ -636,10 +627,10 @@ export const sellerApi: ISellerApi = {
       processStatus: row.processing_status,
       signatureVerified: true,
       receivedAt: row.created_at,
-      tenantId: getPayloadSellerId(row.payload) ?? "",
+      tenantId: user.id,
       tenantName: "",
       error: row.error_message,
-      payload: JSON.stringify(row.payload, null, 2),
+      payload: "",
       stripeEventId: row.stripe_event_id,
     }));
 

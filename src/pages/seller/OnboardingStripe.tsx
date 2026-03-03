@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,40 @@ export default function OnboardingStripe() {
   const { isOnboarded } = useSellerAuth();
   const [state, setState] = useState<StripeState>("not_started");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const restoreStripeState = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("stripe_connected_accounts")
+        .select("charges_enabled, payouts_enabled")
+        .eq("seller_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!mounted) return;
+      if (!data) {
+        setState("not_started");
+        return;
+      }
+
+      if (data.charges_enabled && data.payouts_enabled) {
+        setState("verified");
+      } else {
+        setState("pending");
+      }
+    };
+
+    restoreStripeState();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Guard: redirect to dashboard if already onboarded
   if (isOnboarded) {

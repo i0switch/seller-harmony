@@ -14,6 +14,68 @@ const corsHeaders = {
 
 const DISCORD_CLIENT_ID = Deno.env.get('DISCORD_CLIENT_ID') || '';
 const DISCORD_CLIENT_SECRET = Deno.env.get('DISCORD_CLIENT_SECRET') || '';
+const DISCORD_TOKEN_ENCRYPTION_KEY = Deno.env.get('DISCORD_TOKEN_ENCRYPTION_KEY') || '';
+
+function base64ToBytes(base64: string): Uint8Array {
+  const normalized = base64.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+let tokenEncryptionKeyPromise: Promise<CryptoKey | null> | null = null;
+
+function getTokenEncryptionKey(): Promise<CryptoKey | null> {
+  if (!tokenEncryptionKeyPromise) {
+    tokenEncryptionKeyPromise = (async () => {
+      if (!DISCORD_TOKEN_ENCRYPTION_KEY) {
+        console.warn('[discord-oauth] DISCORD_TOKEN_ENCRYPTION_KEY is not set. Tokens will not be persisted.');
+        return null;
+      }
+
+      try {
+        const keyBytes = base64ToBytes(DISCORD_TOKEN_ENCRYPTION_KEY);
+        if (keyBytes.length !== 32) {
+          console.error('[discord-oauth] DISCORD_TOKEN_ENCRYPTION_KEY must be base64-encoded 32 bytes.');
+          return null;
+        }
+
+        return await crypto.subtle.importKey(
+          'raw',
+          keyBytes,
+          { name: 'AES-GCM' },
+          false,
+          ['encrypt']
+        );
+      } catch (error) {
+        console.error('[discord-oauth] Failed to import DISCORD_TOKEN_ENCRYPTION_KEY:', error);
+        return null;
+      }
+    })();
+  }
+
+  return tokenEncryptionKeyPromise;
+}
+
+async function encryptToken(plainText: string): Promise<string | null> {
+  const key = await getTokenEncryptionKey();
+  if (!key) return null;
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new TextEncoder().encode(plainText);
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  const encryptedBytes = new Uint8Array(encrypted);
+
+  const packed = new Uint8Array(iv.length + encryptedBytes.length);
+  packed.set(iv, 0);
+  packed.set(encryptedBytes, iv.length);
+
+  return btoa(String.fromCharCode(...packed));
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -217,12 +279,21 @@ Deno.serve(async (req: Request) => {
     // When save=false (step 1), store tokens but keep oauth_state for verification.
     // When save=true (single-step flow), clear oauth_state immediately.
     try {
+      const accessTokenEncrypted = tokenData.access_token
+        ? await encryptToken(tokenData.access_token)
+        : null;
+      const refreshTokenEncrypted = tokenData.refresh_token
+        ? await encryptToken(tokenData.refresh_token)
+        : null;
+
       const { error: upsertError } = await supabaseAdmin.from('discord_identities').upsert({
         user_id: user.id,
         discord_user_id: meData.id,
         discord_username: `${meData.username}${meData.discriminator !== '0' ? `#${meData.discriminator}` : ''}`,
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
+        access_token: null,
+        refresh_token: null,
+        access_token_encrypted: accessTokenEncrypted,
+        refresh_token_encrypted: refreshTokenEncrypted,
         token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
         ...(shouldSave
           ? { oauth_state: null, oauth_state_created_at: null }

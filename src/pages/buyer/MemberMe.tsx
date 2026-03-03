@@ -259,20 +259,13 @@ export default function MemberMe() {
 
               // BUG-B06 fix: Cancel Stripe subscriptions before DB update
               // This prevents webhooks from reactivating memberships
-              try {
-                await supabase.functions.invoke('stripe-checkout', {
-                  body: { action: 'cancel_all_subscriptions' }
-                });
-              } catch (stripeErr) {
-                console.error('Stripe cancellation failed (continuing with deletion):', stripeErr);
+              const { data: cancelResult, error: cancelError } = await supabase.functions.invoke('stripe-checkout', {
+                body: { action: 'cancel_all_subscriptions' }
+              });
+              if (cancelError) throw cancelError;
+              if (!cancelResult?.success) {
+                throw new Error(cancelResult?.error || "サブスクリプション解約に失敗しました");
               }
-
-              // Mark all active memberships as canceled
-              await supabase
-                .from("memberships")
-                .update({ status: "canceled" })
-                .eq("buyer_id", user.id)
-                .in("status", ["active", "grace_period", "cancel_scheduled", "payment_failed", "pending_discord"]);
 
               // Remove Discord identity link
               await supabase
