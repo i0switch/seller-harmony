@@ -353,7 +353,7 @@ export type Database = {
           {
             foreignKeyName: "role_assignments_membership_id_fkey"
             columns: ["membership_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "memberships"
             referencedColumns: ["id"]
           },
@@ -456,6 +456,7 @@ export type Database = {
           job_id: string | null
           payload: Json
           processing_status: string
+          seller_id: string | null
           stripe_event_id: string
           updated_at: string
         }
@@ -467,6 +468,7 @@ export type Database = {
           job_id?: string | null
           payload: Json
           processing_status?: string
+          seller_id?: string | null
           stripe_event_id: string
           updated_at?: string
         }
@@ -478,6 +480,7 @@ export type Database = {
           job_id?: string | null
           payload?: Json
           processing_status?: string
+          seller_id?: string | null
           stripe_event_id?: string
           updated_at?: string
         }
