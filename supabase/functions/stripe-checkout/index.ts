@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
       // Join seller_profiles via seller_id -> users.id -> seller_profiles.user_id
       const { data: plan, error: planError } = await supabaseAdmin
         .from('plans')
-        .select(`*`)
+        .select('id, name, description, price, currency, interval, seller_id, stripe_price_id, discord_server_id, discord_role_id')
         .eq('id', planId)
         .eq('is_public', true)
         .is('deleted_at', null)
@@ -65,7 +65,15 @@ Deno.serve(async (req: Request) => {
         .eq('user_id', plan.seller_id)
         .single();
 
-      const planWithSeller = { ...plan, seller_store_name: sellerProfile?.store_name ?? 'Store' };
+      const planWithSeller = {
+        id: plan.id,
+        name: plan.name,
+        description: plan.description,
+        price: plan.price,
+        currency: plan.currency,
+        interval: plan.interval,
+        seller_store_name: sellerProfile?.store_name ?? 'Store',
+      };
 
       return new Response(JSON.stringify(planWithSeller), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

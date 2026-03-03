@@ -45,10 +45,16 @@ Deno.serve(async (req: Request) => {
 
     // Allowed redirect URI patterns (open-redirect prevention)
     const ALLOWED_REDIRECT_PATTERNS = [
-      /^https:\/\/.*\.lovable\.app\/buyer\/discord\/result$/,
       /^https:\/\/member-bridge-flow\.lovable\.app\/buyer\/discord\/result$/,
-      /^https:\/\/.*\.supabase\.co\/.*$/,
     ];
+
+    // Also allow the configured ALLOWED_ORIGIN if set
+    const allowedOrigin = Deno.env.get('ALLOWED_ORIGIN');
+    if (allowedOrigin) {
+      // Escape special regex characters in the origin
+      const escaped = allowedOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      ALLOWED_REDIRECT_PATTERNS.push(new RegExp(`^${escaped}\\/buyer\\/discord\\/result$`));
+    }
 
     // In POST body (from frontend)
     let body;
@@ -58,7 +64,8 @@ Deno.serve(async (req: Request) => {
       body = {};
     }
     const state = body.state || url.searchParams.get('state') || '';
-    const actualRedirectUri = body.redirect_uri || redirect_uri;
+    // Use only the query param redirect_uri (validated above), ignore body.redirect_uri to prevent open redirect
+    const actualRedirectUri = redirect_uri;
 
     // Validate redirect_uri against allowlist
     const isRedirectAllowed = ALLOWED_REDIRECT_PATTERNS.some(p => p.test(actualRedirectUri));

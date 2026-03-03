@@ -223,14 +223,16 @@ export const sellerApi: ISellerApi = {
       .from("plans")
       .select("*, discord_servers(*)")
       .eq("seller_id", user.id)
-      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (params?.status === "published") {
-      query = query.eq("is_public", true);
+      query = query.eq("is_public", true).is("deleted_at", null);
     } else if (params?.status === "draft") {
-      query = query.eq("is_public", false);
+      query = query.eq("is_public", false).is("deleted_at", null);
+    } else if (params?.status === "stopped") {
+      query = query.not("deleted_at", "is", null);
     }
+    // No filter = return all plans (including stopped)
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -279,6 +281,8 @@ export const sellerApi: ISellerApi = {
       discord_server_id,
       discord_role_id: planData.discordRoleId ?? null,
       is_public: planData.status === "published",
+      // BUG-H04: Distinguish "stopped" from "draft" via deleted_at
+      deleted_at: planData.status === "stopped" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
 
@@ -552,19 +556,27 @@ export const sellerApi: ISellerApi = {
   },
 
   async overrideMember(memberId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { error } = await supabase
       .from("memberships")
       .update({ manual_override: true })
-      .eq("id", memberId);
+      .eq("id", memberId)
+      .eq("seller_id", user.id);
 
     if (error) throw new Error(error.message);
   },
 
   async retryDiscordRole(memberId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { data: member, error: fetchErr } = await supabase
       .from("memberships")
       .select("buyer_id, seller_id, plan_id")
       .eq("id", memberId)
+      .eq("seller_id", user.id)
       .single();
 
     if (fetchErr || !member) throw new Error("Member not found");
@@ -592,29 +604,30 @@ export const sellerApi: ISellerApi = {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 10;
 
-    const { data, error } = await supabase
+    // Use RLS-based query — the seller-scoped policy filters by seller_id in payload
+    let query = supabase
       .from("stripe_webhook_events")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    if (params?.status && params.status !== "all") {
+      query = query.eq("processing_status", params.status);
+    }
+
+    // Server-side pagination
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.warn("getWebhooks error:", error.message);
       return { items: [], page, page_size: pageSize, total_count: 0 };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sellerEvents = (data ?? []).filter((row: any) => {
-      const sellerId = getPayloadSellerId(row.payload);
-      if (!sellerId || sellerId !== user.id) return false;
-
-      if (!params?.status || params.status === "all") return true;
-      return row.processing_status === params.status;
-    });
-
-    const total = sellerEvents.length;
-    const start = (page - 1) * pageSize;
-    const paged = sellerEvents.slice(start, start + pageSize);
+    const total = count ?? 0;
+    const paged = data ?? [];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: PlatformWebhookEvent[] = paged.map((row: any) => ({

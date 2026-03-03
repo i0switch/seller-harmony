@@ -310,7 +310,7 @@ Deno.serve(async (req: Request) => {
   } catch (error: unknown) {
     console.error('discord-bot error:', error instanceof Error ? error.message : String(error));
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 400,
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

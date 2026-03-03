@@ -97,8 +97,8 @@ export default function OnboardingStripe() {
       </div>
 
       {state === "not_started" && (
-        <Button variant="ghost" onClick={() => navigate("/seller/onboarding/discord")} className="w-full text-xs text-muted-foreground">
-          スキップ（あとで設定）
+        <Button variant="ghost" onClick={() => navigate("/seller/onboarding/discord")} className="w-full text-xs text-muted-foreground" title="Stripe未連携では決済機能が利用できません">
+          スキップ（あとで設定 — 決済機能は使えません）
         </Button>
       )}
     </OnboardingShell>

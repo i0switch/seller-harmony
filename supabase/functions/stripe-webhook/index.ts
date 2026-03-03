@@ -530,33 +530,45 @@ Deno.serve(async (req: Request) => {
       const dispute = event.data.object as Stripe.Dispute;
       const chargeId = dispute.charge as string;
       if (chargeId) {
-        // Find membership via subscription metadata
-        const { data: memberships } = await supabaseAdmin
-          .from('memberships')
-          .select('id, stripe_subscription_id, seller_id')
-          .eq('stripe_customer_id', dispute.metadata?.customer || '')
-          .limit(5);
-
-        // Try to find the relevant membership via charge -> invoice -> subscription chain
+        // BUG-H02 fix: Use charge → invoice → subscription chain as primary resolution
+        // dispute.metadata?.customer is unreliable (often empty)
         let targetSubId: string | null = null;
+        let resolvedStripeAcct: string | undefined;
         try {
-          // Find seller Connect account for API calls
-          const sellerMem = memberships?.[0];
-          let stripeAcct: string | undefined;
-          if (sellerMem?.seller_id) {
-            const { data: acct } = await supabaseAdmin
-              .from('stripe_connected_accounts')
-              .select('stripe_account_id')
-              .eq('seller_id', sellerMem.seller_id)
-              .single();
-            stripeAcct = acct?.stripe_account_id;
+          // First, try to find the seller via the charge on their Connect account
+          // Get all seller Stripe accounts to check which one owns this charge
+          const { data: allAccounts } = await supabaseAdmin
+            .from('stripe_connected_accounts')
+            .select('seller_id, stripe_account_id');
+
+          for (const acct of (allAccounts ?? [])) {
+            try {
+              const charge = await stripe.charges.retrieve(chargeId, { stripeAccount: acct.stripe_account_id });
+              // Found the correct seller
+              resolvedStripeAcct = acct.stripe_account_id;
+              const invoiceId = charge.invoice as string | null;
+              if (invoiceId) {
+                const invoice = await stripe.invoices.retrieve(invoiceId, { stripeAccount: acct.stripe_account_id });
+                targetSubId = invoice.subscription as string | null;
+              }
+              break;
+            } catch {
+              continue; // This seller doesn't own the charge
+            }
           }
 
-          const charge = await stripe.charges.retrieve(chargeId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
-          const invoiceId = charge.invoice as string | null;
-          if (invoiceId) {
-            const invoice = await stripe.invoices.retrieve(invoiceId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
-            targetSubId = invoice.subscription as string | null;
+          // Fallback: try platform-level (non-Connect) charge
+          if (!targetSubId) {
+            try {
+              const charge = await stripe.charges.retrieve(chargeId);
+              const invoiceId = charge.invoice as string | null;
+              if (invoiceId) {
+                const invoice = await stripe.invoices.retrieve(invoiceId);
+                targetSubId = invoice.subscription as string | null;
+              }
+            } catch {
+              // Not a platform-level charge either
+            }
           }
         } catch (err) {
           console.error('[stripe-webhook] Error resolving dispute charge:', err);
@@ -587,22 +599,39 @@ Deno.serve(async (req: Request) => {
         // Trace charge → invoice → subscription to find the specific membership
         let targetSubId: string | null = null;
         try {
-          // Find a membership with risk_flag to get seller's Stripe account
+          // Find the specific membership with risk_flag AND matching charge
+          // First, find memberships flagged by the dispute.created handler for this dispute
           const { data: flaggedMemberships } = await supabaseAdmin
             .from('memberships')
-            .select('seller_id')
+            .select('seller_id, stripe_subscription_id')
             .eq('risk_flag', true)
-            .limit(1);
+            .not('stripe_subscription_id', 'is', null);
 
+          // Try to resolve via charge chain for each flagged membership's seller
           let stripeAcct: string | undefined;
-          const sellerMem = flaggedMemberships?.[0];
-          if (sellerMem?.seller_id) {
+          let resolvedSellerId: string | undefined;
+          // Try each flagged membership to find the correct seller's Stripe account
+          for (const mem of (flaggedMemberships ?? [])) {
+            if (!mem.seller_id) continue;
             const { data: acct } = await supabaseAdmin
               .from('stripe_connected_accounts')
               .select('stripe_account_id')
-              .eq('seller_id', sellerMem.seller_id)
+              .eq('seller_id', mem.seller_id)
               .single();
-            stripeAcct = acct?.stripe_account_id;
+            if (!acct?.stripe_account_id) continue;
+            try {
+              // Verify that this seller's Stripe account owns the charge
+              await stripe.charges.retrieve(chargeId, { stripeAccount: acct.stripe_account_id });
+              stripeAcct = acct.stripe_account_id;
+              resolvedSellerId = mem.seller_id;
+              break; // Found the correct seller
+            } catch {
+              continue; // This seller doesn't own the charge, try next
+            }
+          }
+          // Fallback: if no flagged membership matched, skip
+          if (!stripeAcct) {
+            console.warn('[stripe-webhook] Could not resolve seller for dispute.closed charge:', chargeId);
           }
 
           const charge = await stripe.charges.retrieve(chargeId, stripeAcct ? { stripeAccount: stripeAcct } : undefined);
