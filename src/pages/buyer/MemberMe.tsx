@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ import {
 } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+
+const STRIPE_BILLING_PORTAL_URL = import.meta.env.VITE_STRIPE_BILLING_PORTAL_URL as string | undefined;
 
 function PlanCard({ plan }: { plan: BuyerMembership }) {
   const [expanded, setExpanded] = useState(false);
@@ -155,6 +157,9 @@ function PlanCard({ plan }: { plan: BuyerMembership }) {
 export default function MemberMe() {
   const [userInfo, setUserInfo] = useState<{ email: string; discordUsername?: string } | null>(null);
   const [userLoading, setUserLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   const { data: memberships = [], isLoading, error, refetch } = useQuery({
     queryKey: ["buyer", "memberships"],
@@ -228,23 +233,57 @@ export default function MemberMe() {
       )}
 
       <div className="space-y-2">
-        <Button variant="outline" className="w-full" asChild>
-          <a href={`https://billing.stripe.com/p/login/test`} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-4 w-4 mr-2" /> 領収書・請求情報を確認する
-          </a>
-        </Button>
+        {STRIPE_BILLING_PORTAL_URL && (
+          <Button variant="outline" className="w-full" asChild>
+            <a href={STRIPE_BILLING_PORTAL_URL} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-4 w-4 mr-2" /> 領収書・請求情報を確認する
+            </a>
+          </Button>
+        )}
 
         <ConfirmDialog
           trigger={
-            <Button variant="outline" className="w-full text-destructive hover:text-destructive">
-              アカウント削除
+            <Button variant="outline" className="w-full text-destructive hover:text-destructive" disabled={deleting}>
+              {deleting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> 削除中…</> : "アカウント削除"}
             </Button>
           }
           title="アカウントを削除しますか？"
           description="この操作は取り消せません。すべてのプランが解約され、Discord連携も解除されます。"
           confirmLabel="削除する"
           destructive
-          onConfirm={() => { }}
+          onConfirm={async () => {
+            setDeleting(true);
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) throw new Error("ユーザー情報を取得できません");
+
+              // Mark all active memberships as canceled
+              await supabase
+                .from("memberships")
+                .update({ status: "canceled" })
+                .eq("buyer_id", user.id)
+                .in("status", ["active", "grace_period", "cancel_scheduled", "payment_failed", "pending_discord"]);
+
+              // Remove Discord identity link
+              await supabase
+                .from("discord_identities")
+                .delete()
+                .eq("user_id", user.id);
+
+              // Sign out
+              await supabase.auth.signOut();
+
+              toast({ title: "アカウントを削除しました" });
+              navigate("/");
+            } catch (err) {
+              toast({
+                title: "アカウント削除に失敗しました",
+                description: err instanceof Error ? err.message : "もう一度お試しください",
+                variant: "destructive",
+              });
+              setDeleting(false);
+            }
+          }}
         />
       </div>
     </div>
