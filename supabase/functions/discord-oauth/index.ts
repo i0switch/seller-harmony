@@ -46,7 +46,7 @@ function getTokenEncryptionKey(): Promise<CryptoKey | null> {
 
         return await crypto.subtle.importKey(
           'raw',
-          keyBytes,
+          keyBytes.buffer as ArrayBuffer,
           { name: 'AES-GCM' },
           false,
           ['encrypt']

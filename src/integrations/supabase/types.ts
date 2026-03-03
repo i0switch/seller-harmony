@@ -67,6 +67,7 @@ export type Database = {
       discord_identities: {
         Row: {
           access_token: string | null
+          access_token_encrypted: string | null
           created_at: string
           discord_user_id: string
           discord_username: string | null
@@ -74,12 +75,14 @@ export type Database = {
           oauth_state: string | null
           oauth_state_created_at: string | null
           refresh_token: string | null
+          refresh_token_encrypted: string | null
           token_expires_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           access_token?: string | null
+          access_token_encrypted?: string | null
           created_at?: string
           discord_user_id: string
           discord_username?: string | null
@@ -87,12 +90,14 @@ export type Database = {
           oauth_state?: string | null
           oauth_state_created_at?: string | null
           refresh_token?: string | null
+          refresh_token_encrypted?: string | null
           token_expires_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           access_token?: string | null
+          access_token_encrypted?: string | null
           created_at?: string
           discord_user_id?: string
           discord_username?: string | null
@@ -100,6 +105,7 @@ export type Database = {
           oauth_state?: string | null
           oauth_state_created_at?: string | null
           refresh_token?: string | null
+          refresh_token_encrypted?: string | null
           token_expires_at?: string | null
           updated_at?: string
           user_id?: string
@@ -119,6 +125,7 @@ export type Database = {
           bot_installed: boolean
           bot_permission_status: Database["public"]["Enums"]["discord_bot_status"]
           created_at: string
+          default_role_id: string | null
           guild_id: string
           guild_name: string | null
           id: string
@@ -129,6 +136,7 @@ export type Database = {
           bot_installed?: boolean
           bot_permission_status?: Database["public"]["Enums"]["discord_bot_status"]
           created_at?: string
+          default_role_id?: string | null
           guild_id: string
           guild_name?: string | null
           id?: string
@@ -139,6 +147,7 @@ export type Database = {
           bot_installed?: boolean
           bot_permission_status?: Database["public"]["Enums"]["discord_bot_status"]
           created_at?: string
+          default_role_id?: string | null
           guild_id?: string
           guild_name?: string | null
           id?: string
@@ -357,6 +366,13 @@ export type Database = {
             referencedRelation: "memberships"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "role_assignments_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: true
+            referencedRelation: "seller_memberships_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       seller_profiles: {
@@ -559,15 +575,40 @@ export type Database = {
     Views: {
       seller_memberships_public: {
         Row: {
-          buyer_id: string
-          created_at: string
-          id: string
-          plan_id: string
-          seller_id: string
-          status: Database["public"]["Enums"]["membership_status"]
-          updated_at: string
+          buyer_id: string | null
+          created_at: string | null
+          id: string | null
+          plan_id: string | null
+          seller_id: string | null
+          status: Database["public"]["Enums"]["membership_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          buyer_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          plan_id?: string | null
+          seller_id?: string | null
+          status?: Database["public"]["Enums"]["membership_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          buyer_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          plan_id?: string | null
+          seller_id?: string | null
+          status?: Database["public"]["Enums"]["membership_status"] | null
+          updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "memberships_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "memberships_plan_id_fkey"
             columns: ["plan_id"]
@@ -586,13 +627,31 @@ export type Database = {
       }
       seller_webhook_events_public: {
         Row: {
-          created_at: string
+          created_at: string | null
           error_message: string | null
-          event_type: string
-          id: string
-          processing_status: string
+          event_type: string | null
+          id: string | null
+          processing_status: string | null
           seller_id: string | null
-          stripe_event_id: string
+          stripe_event_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          event_type?: string | null
+          id?: string | null
+          processing_status?: string | null
+          seller_id?: string | null
+          stripe_event_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          event_type?: string | null
+          id?: string | null
+          processing_status?: string | null
+          seller_id?: string | null
+          stripe_event_id?: string | null
         }
         Relationships: []
       }
