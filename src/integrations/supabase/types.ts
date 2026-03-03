@@ -391,7 +391,7 @@ export type Database = {
           {
             foreignKeyName: "seller_profiles_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -441,7 +441,7 @@ export type Database = {
           {
             foreignKeyName: "stripe_connected_accounts_seller_id_fkey"
             columns: ["seller_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
