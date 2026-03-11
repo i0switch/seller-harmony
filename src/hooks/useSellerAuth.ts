@@ -18,9 +18,13 @@ export function useSellerAuth() {
   } = useAuth();
 
   const [isResolvingOnboarding, setIsResolvingOnboarding] = useState(false);
+  const [hasResolvedOnboarding, setHasResolvedOnboarding] = useState(false);
 
   const refreshOnboardingStep = useCallback(async () => {
-    if (!session?.user || role !== "seller") return;
+    if (!session?.user || role !== "seller") {
+      setHasResolvedOnboarding(true);
+      return;
+    }
 
     setIsResolvingOnboarding(true);
     try {
@@ -76,13 +80,20 @@ export function useSellerAuth() {
       console.error("refreshOnboardingStep failed:", error);
       setSellerOnboardingStep("profile");
     } finally {
+      setHasResolvedOnboarding(true);
       setIsResolvingOnboarding(false);
     }
   }, [role, session?.user, setSellerOnboardingStep]);
 
   useEffect(() => {
+    if (!session || role !== "seller") {
+      setHasResolvedOnboarding(false);
+      return;
+    }
+
+    setHasResolvedOnboarding(false);
     refreshOnboardingStep();
-  }, [refreshOnboardingStep]);
+  }, [refreshOnboardingStep, role, session]);
 
   const isLoggedIn = !!session && role === "seller";
   const isOnboarded = currentStep === "complete";
@@ -147,7 +158,10 @@ export function useSellerAuth() {
   };
 
   return {
-    isOnboarded, isLoggedIn, isLoading: isLoading || isResolvingOnboarding, currentStep,
+    isOnboarded,
+    isLoggedIn,
+    isLoading: isLoading || (isLoggedIn && (!hasResolvedOnboarding || isResolvingOnboarding)),
+    currentStep,
     completeOnboarding, setOnboardingStep, getNextStep, canAccessStep,
     login, signup, logout, refreshOnboardingStep,
   };
