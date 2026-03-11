@@ -113,7 +113,8 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (serverError || !serverData) {
-        return jsonResponse({ error: 'DISCORD_GUILD_ACCESS_DENIED' }, 403, corsHeaders);
+        console.error('discord server ownership check failed', serverError);
+        return jsonResponse({ error: 'DISCORD_SERVER_OWNERSHIP_CHECK_FAILED' }, 403, corsHeaders);
       }
 
       // Get all roles in the guild
@@ -123,7 +124,7 @@ Deno.serve(async (req: Request) => {
       );
       if (!rolesRes.ok) {
         console.error('Failed to fetch guild roles', rolesRes.status, await rolesRes.text());
-        return jsonResponse({ error: 'DISCORD_GUILD_ACCESS_DENIED' }, 403, corsHeaders);
+        return jsonResponse({ error: 'DISCORD_GUILD_ROLES_FETCH_FAILED', status: rolesRes.status }, 403, corsHeaders);
       }
       const roles = await rolesRes.json();
 
