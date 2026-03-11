@@ -32,6 +32,13 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
+function jsonResponse(body: Record<string, unknown>, status: number, corsHeaders: HeadersInit) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -72,15 +79,16 @@ Deno.serve(async (req: Request) => {
     const isSellerOrAdmin = userRole === 'seller' || userRole === 'platform_admin';
 
     if (!isSellerOrAdmin && !(isBuyer && action === 'grant_role')) {
-      return new Response(JSON.stringify({ error: 'Forbidden' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'FORBIDDEN' }, 403, corsHeaders);
     }
 
     if (action === 'validate_bot_permission') {
       if (!guild_id || !role_id) {
-        throw new Error('guild_id and role_id are required');
+        return jsonResponse({ error: 'DISCORD_GUILD_AND_ROLE_REQUIRED' }, 400, corsHeaders);
+      }
+
+      if (!DISCORD_BOT_TOKEN) {
+        return jsonResponse({ error: 'DISCORD_BOT_TOKEN_MISSING' }, 500, corsHeaders);
       }
 
       // UPSERT: Ensure discord_servers record exists for this seller + guild
@@ -105,10 +113,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (serverError || !serverData) {
-        return new Response(JSON.stringify({ error: 'Forbidden: You do not own this server' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return jsonResponse({ error: 'DISCORD_GUILD_ACCESS_DENIED' }, 403, corsHeaders);
       }
 
       // Get all roles in the guild
@@ -116,14 +121,20 @@ Deno.serve(async (req: Request) => {
         `https://discord.com/api/v10/guilds/${guild_id}/roles`,
         { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
       );
-      if (!rolesRes.ok) throw new Error('Failed to fetch guild roles');
+      if (!rolesRes.ok) {
+        console.error('Failed to fetch guild roles', rolesRes.status, await rolesRes.text());
+        return jsonResponse({ error: 'DISCORD_GUILD_ACCESS_DENIED' }, 403, corsHeaders);
+      }
       const roles = await rolesRes.json();
 
       // Get bot's own user info
       const meRes = await fetch('https://discord.com/api/v10/users/@me', {
         headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
       });
-      if (!meRes.ok) throw new Error('Failed to fetch bot info');
+      if (!meRes.ok) {
+        console.error('Failed to fetch bot info', meRes.status, await meRes.text());
+        return jsonResponse({ error: 'DISCORD_BOT_AUTH_FAILED' }, 500, corsHeaders);
+      }
       const me = await meRes.json();
 
       // Get bot's member info in the guild
@@ -131,7 +142,10 @@ Deno.serve(async (req: Request) => {
         `https://discord.com/api/v10/guilds/${guild_id}/members/${me.id}`,
         { headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` } }
       );
-      if (!memberRes.ok) throw new Error('Bot is not in this guild');
+      if (!memberRes.ok) {
+        console.error('Bot is not in this guild', memberRes.status, await memberRes.text());
+        return jsonResponse({ error: 'DISCORD_BOT_NOT_IN_GUILD' }, 403, corsHeaders);
+      }
       const member = await memberRes.json();
 
       // Calculate bot's highest role position
@@ -143,7 +157,9 @@ Deno.serve(async (req: Request) => {
 
       // Check if bot can manage the target role
       const targetRole = roles.find((x: { id: string; position: number }) => x.id === role_id);
-      if (!targetRole) throw new Error('Target role not found in guild');
+      if (!targetRole) {
+        return jsonResponse({ error: 'DISCORD_ROLE_NOT_FOUND' }, 404, corsHeaders);
+      }
 
       const status = botMaxPos > targetRole.position ? 'ok' : 'insufficient';
 
@@ -175,16 +191,10 @@ Deno.serve(async (req: Request) => {
 
       if (finalUpsertError) {
         console.error('Final upsert failed:', finalUpsertError);
-        return new Response(
-          JSON.stringify({ error: finalUpsertError.message }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
+        return jsonResponse({ error: finalUpsertError.message }, 400, corsHeaders);
       }
 
-      return new Response(
-        JSON.stringify({ status, targetRole, botMaxPos }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ status, targetRole, botMaxPos }, 200, corsHeaders);
     }
 
     if (action === 'grant_role') {
@@ -199,10 +209,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (membershipError || !membership) {
-        return new Response(JSON.stringify({ error: 'Membership not found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return jsonResponse({ error: 'MEMBERSHIP_NOT_FOUND' }, 404, corsHeaders);
       }
 
       const isBuyerOwner = userData?.role === 'buyer' && membership.buyer_id === user.id;
@@ -210,10 +217,7 @@ Deno.serve(async (req: Request) => {
       const isPlatformAdmin = userData?.role === 'platform_admin';
 
       if (!isBuyerOwner && !isSellerOwner && !isPlatformAdmin) {
-        return new Response(JSON.stringify({ error: 'Forbidden' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return jsonResponse({ error: 'FORBIDDEN' }, 403, corsHeaders);
       }
 
       if (!['active', 'grace_period', 'cancel_scheduled'].includes(membership.status)) {
@@ -258,9 +262,10 @@ Deno.serve(async (req: Request) => {
           guildId = serversBySeller[0].guild_id ?? '';
           console.warn(`[discord-bot] Fallback: plan ${plan.id} has no discord_server_id, using seller's only server`);
         } else if (serversBySeller && serversBySeller.length > 1) {
-          return new Response(
-            JSON.stringify({ status: 'failed', reason: 'ambiguous_server', detail: 'Plan has no discord_server_id and seller has multiple servers. Please configure the plan with a specific server.' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          return jsonResponse(
+            { status: 'failed', reason: 'ambiguous_server', detail: 'Plan has no discord_server_id and seller has multiple servers. Please configure the plan with a specific server.' },
+            400,
+            corsHeaders,
           );
         }
       }
@@ -326,15 +331,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return new Response(JSON.stringify({ error: 'Unknown action' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'UNKNOWN_ACTION' }, 400, corsHeaders);
   } catch (error: unknown) {
     console.error('discord-bot error:', error instanceof Error ? error.message : String(error));
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'DISCORD_INTERNAL_ERROR' }, 500, corsHeaders);
   }
 });

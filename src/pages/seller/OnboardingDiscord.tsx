@@ -27,6 +27,11 @@ const errorMessages: Record<string, string> = {
   DISCORD_MANAGE_ROLES_MISSING: "Botに「ロールの管理」権限がありません。サーバー設定でBotの権限を確認してください。",
   DISCORD_ROLE_NOT_FOUND: "指定されたロールIDが見つかりません。ロールIDを確認してください。",
   DISCORD_ROLE_HIERARCHY_INVALID: "Botの役職が対象ロールより下位にあります。サーバー設定でBotの役職を対象ロールより上に移動してください。",
+  DISCORD_BOT_NOT_IN_GUILD: "Botがこのサーバーに参加していません。招待URLから対象サーバーにBotを追加してください。",
+  DISCORD_BOT_AUTH_FAILED: "Discord Botの認証に失敗しました。Botトークン設定を確認してください。",
+  DISCORD_BOT_TOKEN_MISSING: "Supabase の Discord Bot トークンが未設定です。",
+  DISCORD_GUILD_AND_ROLE_REQUIRED: "サーバーIDとロールIDを入力してから検証してください。",
+  DISCORD_INTERNAL_ERROR: "Discord検証中にサーバーエラーが発生しました。時間をおいて再試行してください。",
 };
 
 function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000): Promise<T> {
@@ -120,12 +125,19 @@ export default function OnboardingDiscord() {
         return;
       }
       let code = "DISCORD_GUILD_ACCESS_DENIED";
-      if (errorMsg.includes("Role not found")) code = "DISCORD_ROLE_NOT_FOUND";
+      const matchedCode = Object.keys(errorMessages).find((candidate) => errorMsg.includes(candidate));
+      if (matchedCode) {
+        code = matchedCode;
+      } else if (errorMsg.includes("Role not found")) {
+        code = "DISCORD_ROLE_NOT_FOUND";
+      }
 
       setValidation({
-        botInstalled: errorMsg.includes("Role not found"),
-        manageRoles: errorMsg.includes("Role not found"),
-        roleExists: false, roleHierarchy: false, errorCode: code
+        botInstalled: code === "DISCORD_ROLE_NOT_FOUND" || code === "DISCORD_ROLE_HIERARCHY_INVALID",
+        manageRoles: code === "DISCORD_ROLE_NOT_FOUND" || code === "DISCORD_ROLE_HIERARCHY_INVALID",
+        roleExists: code !== "DISCORD_ROLE_NOT_FOUND",
+        roleHierarchy: false,
+        errorCode: code
       });
       setCheckStatus("error");
     }
