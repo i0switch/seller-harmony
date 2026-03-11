@@ -17,7 +17,7 @@ const navItems = [
 export default function SellerLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isOnboarded, isLoggedIn, isLoading, logout } = useSellerAuth();
+  const { isOnboarded, isLoggedIn, isLoading, logout, currentStep } = useSellerAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -41,7 +41,7 @@ export default function SellerLayout() {
 
   // Guard: redirect to onboarding if not completed
   if (!isOnboarded) {
-    return <Navigate to="/seller/onboarding/profile" replace />;
+    return <Navigate to={`/seller/onboarding/${currentStep}`} replace />;
   }
 
   return (

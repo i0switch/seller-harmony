@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,41 @@ export default function OnboardingProfile() {
   const [supportEmail, setSupportEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let mounted = true;
+
+    const restoreProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [{ data: profile }, { data: userRow }] = await Promise.all([
+        supabase
+          .from("seller_profiles")
+          .select("store_name")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("users")
+          .select("display_name, email")
+          .eq("id", user.id)
+          .maybeSingle(),
+      ]);
+
+      if (!mounted) return;
+      setDisplayName(userRow?.display_name ?? "");
+      setServiceName(profile?.store_name ?? "");
+      setSupportEmail(userRow?.email ?? "");
+    };
+
+    restoreProfile().catch(() => {
+      // Allow manual entry if restore fails.
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Guard: redirect to dashboard if already onboarded
   if (isOnboarded) {
