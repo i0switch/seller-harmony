@@ -11,6 +11,7 @@ const BUYER_ALLOWED_ROLES = ["buyer", "platform_admin"];
 export default function BuyerLayout() {
   const { session, role, isLoading } = useAuth();
   const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
 
   const isPublicPath = PUBLIC_PATHS.some(p => location.pathname.startsWith(p));
 
@@ -24,12 +25,12 @@ export default function BuyerLayout() {
 
   // Guard: redirect to buyer login if not logged in (except public paths)
   if (!session && !isPublicPath) {
-    return <Navigate to="/buyer/login" replace state={{ from: location.pathname }} />;
+    return <Navigate to={`/buyer/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
-  // Guard: redirect sellers to their dashboard (they shouldn't access buyer pages)
+  // Guard: non-buyer sessions should re-authenticate as a buyer for purchase/member flows
   if (session && role && !BUYER_ALLOWED_ROLES.includes(role) && !isPublicPath) {
-    return <Navigate to="/seller/dashboard" replace />;
+    return <Navigate to={`/buyer/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   return (
