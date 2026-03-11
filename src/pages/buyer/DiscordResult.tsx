@@ -272,7 +272,7 @@ export default function DiscordResult() {
           <Button asChild className="w-full h-12 text-base font-bold">
             <Link to="/buyer/discord/confirm">
               <RotateCcw className="h-5 w-5 mr-2" />
-              もう一度連携を試す
+              もう一度連携する
             </Link>
           </Button>
         )}

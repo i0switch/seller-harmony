@@ -218,7 +218,7 @@ test.describe('TC-03: Seller オンボーディング全4ステップ', () => {
         // ボタン
         await expect(page.getByRole('button', { name: 'Discord設定を検証' })).toBeVisible();
         await expect(page.getByRole('button', { name: /戻る/ })).toBeVisible();
-        await expect(page.getByRole('button', { name: '次へ' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '保存して次へ' })).toBeVisible();
     });
 
     // ── TC-03-11: ステップ2 — 空の状態で検証 ────────────────────────
@@ -285,7 +285,8 @@ test.describe('TC-03: Seller オンボーディング全4ステップ', () => {
         await page.goto('/seller/onboarding/discord');
         await expect(page.getByText('Discord連携')).toBeVisible({ timeout: 15000 });
 
-        await page.getByRole('button', { name: '次へ' }).click();
+        await page.getByPlaceholder('例: 1234567890123456789').fill('1234567890123456789');
+        await page.getByRole('button', { name: '保存して次へ' }).click();
 
         await expect(page).toHaveURL(/\/seller\/onboarding\/complete/, { timeout: 15000 });
     });
@@ -339,7 +340,8 @@ test.describe('TC-03: Seller オンボーディング全4ステップ', () => {
         // Step 2: Discord → 次へ
         await expect(page).toHaveURL(/\/seller\/onboarding\/discord/, { timeout: 15000 });
         await expect(page.getByText('Discord連携')).toBeVisible();
-        await page.getByRole('button', { name: '次へ' }).click();
+        await page.getByPlaceholder('例: 1234567890123456789').fill('1234567890123456789');
+        await page.getByRole('button', { name: '保存して次へ' }).click();
 
         // Step 3: 完了
         await expect(page).toHaveURL(/\/seller\/onboarding\/complete/, { timeout: 15000 });

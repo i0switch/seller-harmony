@@ -29,10 +29,19 @@ const errorMessages: Record<string, string> = {
   DISCORD_ROLE_HIERARCHY_INVALID: "Botの役職が対象ロールより下位にあります。サーバー設定でBotの役職を対象ロールより上に移動してください。",
 };
 
+function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
+
 export default function OnboardingDiscord() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isOnboarded } = useSellerAuth();
+  const { isOnboarded, setOnboardingStep } = useSellerAuth();
   const [guildId, setGuildId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
@@ -61,10 +70,10 @@ export default function OnboardingDiscord() {
   }
 
   const runValidation = async () => {
-    if (!guildId.trim() || !roleId.trim()) {
+    if (!guildId.trim()) {
       toast({
         title: "入力エラー",
-        description: "サーバーIDと役割(Role)IDを入力してください",
+        description: "サーバーIDを入力してください",
         variant: "destructive",
       });
       return;
@@ -72,9 +81,16 @@ export default function OnboardingDiscord() {
     setCheckStatus("checking");
 
     try {
-      const { data, error } = await supabase.functions.invoke('discord-bot', {
-        body: { action: 'validate_bot_permission', guild_id: guildId.trim(), role_id: roleId.trim() }
-      });
+      const { data, error } = await withTimeout(
+        supabase.functions.invoke('discord-bot', {
+          body: {
+            action: 'validate_bot_permission',
+            guild_id: guildId.trim(),
+            role_id: roleId.trim() || undefined,
+          }
+        }),
+        "Discord検証がタイムアウトしました。時間をおいて再度お試しください。"
+      );
 
       if (error || !data) throw new Error(error?.message || "Function error");
       if (data.error) throw new Error(data.error);
@@ -93,6 +109,16 @@ export default function OnboardingDiscord() {
     } catch (err: unknown) {
       console.error(err);
       const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg.includes("タイムアウト")) {
+        setValidation(null);
+        setCheckStatus("error");
+        toast({
+          title: "検証に失敗しました",
+          description: errorMsg,
+          variant: "destructive",
+        });
+        return;
+      }
       let code = "DISCORD_GUILD_ACCESS_DENIED";
       if (errorMsg.includes("Role not found")) code = "DISCORD_ROLE_NOT_FOUND";
 
@@ -113,10 +139,10 @@ export default function OnboardingDiscord() {
   );
 
   const handleNext = async () => {
-    if (!guildId.trim() || !roleId.trim()) {
+    if (!guildId.trim()) {
       toast({
         title: "入力エラー",
-        description: "次へ進む前にサーバーIDと役割(Role)IDを入力してください",
+        description: "次へ進む前にサーバーIDを入力してください",
         variant: "destructive",
       });
       return;
@@ -124,10 +150,14 @@ export default function OnboardingDiscord() {
 
     setIsSavingNext(true);
     try {
-      await sellerApi.saveDiscordSettings({
-        guildId: guildId.trim(),
-        defaultRoleId: roleId.trim(),
-      });
+      await withTimeout(
+        sellerApi.saveDiscordSettings({
+          guildId: guildId.trim(),
+          defaultRoleId: roleId.trim() || "",
+        }),
+        "Discord設定の保存がタイムアウトしました。時間をおいて再度お試しください。"
+      );
+      setOnboardingStep("complete");
       navigate("/seller/onboarding/complete");
     } catch (err: unknown) {
       toast({
@@ -216,7 +246,7 @@ export default function OnboardingDiscord() {
           <ArrowLeft className="h-4 w-4 mr-1" /> 戻る
         </Button>
         <Button onClick={handleNext} className="flex-1" disabled={isSavingNext}>
-          {isSavingNext ? "保存中..." : "次へ"}
+          {isSavingNext ? "保存中..." : "保存して次へ"}
         </Button>
       </div>
     </OnboardingShell>

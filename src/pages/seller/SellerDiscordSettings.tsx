@@ -19,6 +19,15 @@ const errorGuides: Record<string, { message: string; fix: string }> = {
   DISCORD_ROLE_HIERARCHY_INVALID: { message: "Botの役職が対象ロールより下位です", fix: "サーバー設定 → ロール で、Botの役職を対象ロールより上に移動" },
 };
 
+function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
+
 export default function SellerDiscordSettings() {
   const [settings, setSettings] = useState<SellerDiscordSettingsType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,13 +52,21 @@ export default function SellerDiscordSettings() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await sellerApi.saveDiscordSettings({
-        guildId,
-      });
+      await withTimeout(
+        sellerApi.saveDiscordSettings({
+          guildId,
+          defaultRoleId,
+        }),
+        "保存がタイムアウトしました。時間をおいて再度お試しください。"
+      );
       toast({ title: "設定を保存しました" });
     } catch (err: unknown) {
       console.error(err);
-      toast({ title: "エラー", description: "設定の保存に失敗しました", variant: "destructive" });
+      toast({
+        title: "エラー",
+        description: err instanceof Error ? err.message : "設定の保存に失敗しました",
+        variant: "destructive"
+      });
     } finally {
       setIsSaving(false);
     }
@@ -58,13 +75,16 @@ export default function SellerDiscordSettings() {
   const runVerify = async () => {
     setVerifyStatus("checking");
     try {
-      const { data, error } = await supabase.functions.invoke("discord-bot", {
-        body: {
-          action: "validate_bot_permission",
-          guild_id: guildId,
-          role_id: defaultRoleId,
-        },
-      });
+      const { data, error } = await withTimeout(
+        supabase.functions.invoke("discord-bot", {
+          body: {
+            action: "validate_bot_permission",
+            guild_id: guildId,
+            role_id: defaultRoleId || undefined,
+          },
+        }),
+        "検証がタイムアウトしました。時間をおいて再度お試しください。"
+      );
 
       if (error) throw error;
 
@@ -87,7 +107,11 @@ export default function SellerDiscordSettings() {
     } catch (err) {
       console.error("Discord verification failed:", err);
       setVerifyStatus("error");
-      toast({ title: "エラー", description: "検証中にエラーが発生しました", variant: "destructive" });
+      toast({
+        title: "エラー",
+        description: err instanceof Error ? err.message : "検証中にエラーが発生しました",
+        variant: "destructive"
+      });
     }
   };
 

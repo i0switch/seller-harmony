@@ -83,9 +83,17 @@ test.describe('TC-02: Seller認証（新規登録・ログイン）', () => {
         // Form submitted (may succeed or show server error, but form validation passed)
         await page.waitForTimeout(3000);
         const url = page.url();
-        // Either redirected to onboarding/profile or stayed on signup (account may already exist)
-        const navigated = url.includes('/seller/onboarding/profile') || url.includes('/seller/signup');
+        // Either redirected to check-email or stayed on signup (account may already exist)
+        const navigated = url.includes('/seller/signup/check-email') || url.includes('/seller/signup');
         expect(navigated).toBeTruthy();
+    });
+
+    test('TC-02-04b: メール認証案内ページが表示される', async ({ page }) => {
+        await page.goto('/seller/signup/check-email?email=test@example.com');
+
+        await expect(page.getByText('メールアドレスを確認して')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByText('test@example.com')).toBeVisible();
+        await expect(page.getByRole('link', { name: '確認しました' })).toBeVisible();
     });
 
     // ── TC-02-05: 新規登録→ログインへの遷移 ──────────────────────

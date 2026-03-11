@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSellerAuth } from "@/hooks/useSellerAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function SellerSignup() {
   const navigate = useNavigate();
@@ -33,7 +34,8 @@ export default function SellerSignup() {
       setErrors({ ...errors, form: res.error.message });
       return;
     }
-    navigate("/seller/onboarding/profile");
+    await supabase.auth.signOut();
+    navigate(`/seller/signup/check-email?email=${encodeURIComponent(email.trim())}`);
   };
 
   return (

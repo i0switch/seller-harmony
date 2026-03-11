@@ -37,7 +37,7 @@ test.describe('Seller Flow', () => {
             // ── 5. Discord Setup ───────────────────────────────────────────────
             await expect(page).toHaveURL(/\/seller\/onboarding\/discord/, { timeout: 8000 });
             await page.getByPlaceholder('例: 1234567890123456789').fill('123456789012345678');
-            await page.getByRole('button', { name: '次へ' }).click();
+            await page.getByRole('button', { name: '保存して次へ' }).click();
 
             // ── 6. Complete Onboarding ─────────────────────────────────────────
             await expect(page).toHaveURL(/\/seller\/onboarding\/complete/, { timeout: 8000 });

@@ -21,6 +21,7 @@ import PlatformLayout from "./layouts/PlatformLayout";
 
 // Seller
 import SellerSignup from "./pages/seller/SellerSignup";
+import SellerSignupCheckEmail from "./pages/seller/SellerSignupCheckEmail";
 import SellerLogin from "./pages/seller/SellerLogin";
 import OnboardingProfile from "./pages/seller/OnboardingProfile";
 import OnboardingStripe from "./pages/seller/OnboardingStripe";
@@ -71,6 +72,7 @@ const App = () => (
 
             {/* Seller - standalone pages */}
             <Route path="/seller/signup" element={<SellerSignup />} />
+            <Route path="/seller/signup/check-email" element={<SellerSignupCheckEmail />} />
             <Route path="/seller/login" element={<SellerLogin />} />
             <Route path="/seller/onboarding/profile" element={<OnboardingProfile />} />
             <Route path="/seller/onboarding/stripe" element={<OnboardingStripe />} />

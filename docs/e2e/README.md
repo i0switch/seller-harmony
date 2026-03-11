@@ -7,6 +7,8 @@
   - ローカル環境E2E結果（3回連続実行結果、シナリオ別判定、修正履歴）
 - `docs/e2e/LOVABLE_WALKTHROUGH.md`
   - Lovable Hosted環境の実行結果（現状のブロッカーと次アクション）
+- `docs/e2e/PRODUCTION_SMOKE_2026-03-11.md`
+  - 本番URL最終テスト前の hosted E2E 実行結果と外部依存ブロッカー
 
 ## 実行ポリシー
 - 仕様基準は `要件定義_ai_optimized.md` のみ。
