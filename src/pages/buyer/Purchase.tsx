@@ -7,11 +7,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ErrorBanner, LoadingSkeleton } from "@/components/shared";
 import { formatCurrency, planTypeLabel } from "@/types";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Purchase() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { toast } = useToast();
+    const { role } = useAuth();
     const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
 
     const { data: plan, isLoading, error } = useQuery({
@@ -44,12 +46,12 @@ export default function Purchase() {
             setIsCheckoutLoading(true);
 
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
+            if (!session || (role && role !== "buyer" && role !== "platform_admin")) {
                 toast({
                     title: "ログインが必要です",
-                    description: "購入へ進む前にログイン・または会員登録をお願いします",
+                    description: "購入へ進む前に、購入者アカウントでログイン・または会員登録をお願いします",
                 });
-                navigate(`/buyer/login?returnTo=/p/${id}`);
+                navigate(`/buyer/login?returnTo=${encodeURIComponent(`/p/${id}`)}`);
                 return;
             }
 
@@ -64,9 +66,19 @@ export default function Purchase() {
                 throw new Error("購入URLの取得に失敗しました");
             }
         } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "決済の準備中にエラーが発生しました";
+            if (message.includes("You already have an active subscription to this plan")) {
+                toast({
+                    title: "このプランはすでに購入済みです",
+                    description: "購入者マイページまたはDiscord連携画面から続けてください。",
+                });
+                navigate("/member/me");
+                return;
+            }
+
             toast({
                 title: "エラー",
-                description: err instanceof Error ? err.message : "決済の準備中にエラーが発生しました",
+                description: message,
                 variant: "destructive",
             });
         } finally {
