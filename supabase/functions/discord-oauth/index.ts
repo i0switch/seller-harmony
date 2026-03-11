@@ -12,6 +12,10 @@ const FALLBACK_ALLOWED_ORIGINS = [
   'https://preview--member-bridge-flow.lovable.app',
 ].filter((origin): origin is string => Boolean(origin));
 
+const ALLOWED_REDIRECT_URIS = FALLBACK_ALLOWED_ORIGINS.map(
+  (origin) => `${origin}/buyer/discord/result`
+);
+
 function getCorsHeaders(req: Request) {
   const requestOrigin = req.headers.get('origin');
   const allowedOrigin = requestOrigin && FALLBACK_ALLOWED_ORIGINS.includes(requestOrigin)
@@ -118,20 +122,6 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
-    const redirect_uri = url.searchParams.get('redirect_uri') || (ALLOWED_ORIGIN ? `${ALLOWED_ORIGIN}/buyer/discord/result` : 'https://member-bridge-flow.lovable.app/buyer/discord/result');
-
-    // Allowed redirect URI patterns (open-redirect prevention)
-    const ALLOWED_REDIRECT_PATTERNS = [
-      /^https:\/\/member-bridge-flow\.lovable\.app\/buyer\/discord\/result$/,
-    ];
-
-    // Also allow the configured ALLOWED_ORIGIN if set
-    const allowedOrigin = Deno.env.get('ALLOWED_ORIGIN');
-    if (allowedOrigin) {
-      // Escape special regex characters in the origin
-      const escaped = allowedOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      ALLOWED_REDIRECT_PATTERNS.push(new RegExp(`^${escaped}\\/buyer\\/discord\\/result$`));
-    }
 
     // In POST body (from frontend)
     let body;
@@ -141,11 +131,11 @@ Deno.serve(async (req: Request) => {
       body = {};
     }
     const state = body.state || url.searchParams.get('state') || '';
-    // Use only the query param redirect_uri (validated above), ignore body.redirect_uri to prevent open redirect
-    const actualRedirectUri = redirect_uri;
+    const requestedRedirectUri = body.redirect_uri || url.searchParams.get('redirect_uri');
+    const actualRedirectUri = requestedRedirectUri || `${getCorsHeaders(req)['Access-Control-Allow-Origin']}/buyer/discord/result`;
 
     // Validate redirect_uri against allowlist
-    const isRedirectAllowed = ALLOWED_REDIRECT_PATTERNS.some(p => p.test(actualRedirectUri));
+    const isRedirectAllowed = ALLOWED_REDIRECT_URIS.includes(actualRedirectUri);
     if (!isRedirectAllowed) {
       return new Response(JSON.stringify({ error: 'Invalid redirect_uri' }), {
         status: 400,
