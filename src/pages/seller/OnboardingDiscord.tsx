@@ -41,7 +41,7 @@ function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000)
 export default function OnboardingDiscord() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isOnboarded, setOnboardingStep } = useSellerAuth();
+  const { isOnboarded } = useSellerAuth();
   const [guildId, setGuildId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
@@ -157,7 +157,6 @@ export default function OnboardingDiscord() {
         }),
         "Discord設定の保存がタイムアウトしました。時間をおいて再度お試しください。"
       );
-      setOnboardingStep("complete");
       navigate("/seller/onboarding/complete");
     } catch (err: unknown) {
       toast({
