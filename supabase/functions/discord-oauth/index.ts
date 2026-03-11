@@ -6,11 +6,24 @@ if (!ALLOWED_ORIGIN) {
   console.error('ALLOWED_ORIGIN is not configured. CORS will reject all cross-origin requests.');
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app',
+const FALLBACK_ALLOWED_ORIGINS = [
+  ALLOWED_ORIGIN,
+  'https://member-bridge-flow.lovable.app',
+  'https://preview--member-bridge-flow.lovable.app',
+].filter((origin): origin is string => Boolean(origin));
+
+function getCorsHeaders(req: Request) {
+  const requestOrigin = req.headers.get('origin');
+  const allowedOrigin = requestOrigin && FALLBACK_ALLOWED_ORIGINS.includes(requestOrigin)
+    ? requestOrigin
+    : (ALLOWED_ORIGIN || 'https://member-bridge-flow.lovable.app');
+
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-};
+  };
+}
 
 const DISCORD_CLIENT_ID = Deno.env.get('DISCORD_CLIENT_ID') || '';
 const DISCORD_CLIENT_SECRET = Deno.env.get('DISCORD_CLIENT_SECRET') || '';
@@ -78,6 +91,8 @@ async function encryptToken(plainText: string): Promise<string | null> {
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
