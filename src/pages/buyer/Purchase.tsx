@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorBanner, LoadingSkeleton } from "@/components/shared";
@@ -19,11 +19,20 @@ export default function Purchase() {
         queryFn: async () => {
             if (!id) throw new Error("Plan ID is required");
 
-            const { data, error } = await supabase.functions.invoke(`stripe-checkout?plan_id=${id}`, {
-                method: "GET"
-            });
+            const res = await fetch(
+                `${SUPABASE_URL}/functions/v1/stripe-checkout?plan_id=${encodeURIComponent(id)}`,
+                {
+                    method: "GET",
+                    headers: {
+                        apikey: SUPABASE_PUBLISHABLE_KEY,
+                    },
+                }
+            );
 
-            if (error) throw error;
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error((data as { error?: string } | null)?.error || "プラン情報の取得に失敗しました。");
+            }
             if (!data) throw new Error("プランが見つかりません。");
             return data as { name?: string; description?: string; price?: number; currency?: string; interval?: string; seller_store_name?: string };
         },
