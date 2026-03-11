@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/async";
 
 export type Role = "platform_admin" | "seller" | "buyer";
 export type OnboardingStep = "profile" | "stripe" | "discord" | "complete";
@@ -52,15 +53,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let subscription: { unsubscribe: () => void } | undefined;
 
         const initializeAuth = async () => {
-            // Get initial session first
-            const { data: { session: initialSession } } = await supabase.auth.getSession();
-            await onAuthStateChange("INITIAL", initialSession);
+            try {
+                const { data: { session: initialSession } } = await withTimeout(
+                    supabase.auth.getSession(),
+                    "認証セッションの取得がタイムアウトしました。",
+                );
+                await onAuthStateChange("INITIAL", initialSession);
 
-            // Then listen for changes
-            const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
-                (_event, newSession) => onAuthStateChange(_event, newSession)
-            );
-            subscription = sub;
+                const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
+                    (_event, newSession) => onAuthStateChange(_event, newSession)
+                );
+                subscription = sub;
+            } catch (error) {
+                console.error("initializeAuth failed:", error);
+                setSession(null);
+                setUser(null);
+                setRole(null);
+                setIsLoading(false);
+            }
         };
 
         initializeAuth();
@@ -75,13 +85,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentSession?.user ?? null);
 
         if (currentSession?.user) {
-            // Read role from public.users table (source of truth)
-            const { data } = await supabase
-                .from('users')
-                .select('role')
-                .eq('id', currentSession.user.id)
-                .single();
-            setRole((data?.role as Role) || null);
+            try {
+                const { data } = await withTimeout(
+                    supabase
+                        .from('users')
+                        .select('role')
+                        .eq('id', currentSession.user.id)
+                        .single(),
+                    "ユーザー権限の取得がタイムアウトしました。",
+                );
+                setRole((data?.role as Role) || null);
+            } catch (error) {
+                console.error("role lookup failed:", { event, error });
+                setRole(null);
+            }
         } else {
             setRole(null);
         }

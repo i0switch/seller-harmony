@@ -24,6 +24,7 @@ import type {
   GrantPolicy,
 } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/async";
 
 // ─── helpers ────────────────────────────────────────────────────────
 
@@ -80,27 +81,37 @@ export const sellerApi: ISellerApi = {
 
   // ── Stats ──────────────────────────────────────────────────────────
   async getStats(): Promise<SellerStats> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await withTimeout(
+      supabase.auth.getUser(),
+      "販売者情報の取得がタイムアウトしました。",
+    );
     if (!user) throw new Error("Not authenticated");
 
-    const { count: totalMembers } = await supabase
-      .from("seller_memberships_public")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active");
-
-    const { data: plans } = await supabase
-      .from("plans")
-      .select("id, price, is_public")
-      .eq("seller_id", user.id)
-      .is("deleted_at", null);
+    const [{ count: totalMembers }, { data: plans }] = await withTimeout(
+      Promise.all([
+        supabase
+          .from("seller_memberships_public")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "active"),
+        supabase
+          .from("plans")
+          .select("id, price, is_public")
+          .eq("seller_id", user.id)
+          .is("deleted_at", null),
+      ]),
+      "ダッシュボード統計の取得がタイムアウトしました。",
+    );
 
     const activePlans = plans?.filter((p) => p.is_public).length ?? 0;
 
     // Calculate MRR: sum of (active_member_count * plan_price) for each plan
-    const { data: activeMemberships } = await supabase
-      .from("seller_memberships_public")
-      .select("plan_id")
-      .in("status", ["active", "grace_period", "cancel_scheduled"]);
+    const { data: activeMemberships } = await withTimeout(
+      supabase
+        .from("seller_memberships_public")
+        .select("plan_id")
+        .in("status", ["active", "grace_period", "cancel_scheduled"]),
+      "会員統計の取得がタイムアウトしました。",
+    );
 
     let mrr = 0;
     if (activeMemberships && plans) {
@@ -122,12 +133,15 @@ export const sellerApi: ISellerApi = {
 
   // ── Announcements (platform-level, read-only for sellers) ──────────
   async getAnnouncements(): Promise<SystemAnnouncement[]> {
-    const { data, error } = await supabase
-      .from("system_announcements")
-      .select("*")
-      .eq("is_published", true)
-      .order("created_at", { ascending: false })
-      .limit(10);
+    const { data, error } = await withTimeout(
+      supabase
+        .from("system_announcements")
+        .select("*")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false })
+        .limit(10),
+      "お知らせの取得がタイムアウトしました。",
+    );
 
     if (error) {
       console.warn("getAnnouncements error:", error.message);
@@ -151,15 +165,21 @@ export const sellerApi: ISellerApi = {
 
   // ── Discord Settings ────────────────────────────────────────────────
   async getDiscordSettings(): Promise<SellerDiscordSettings> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await withTimeout(
+      supabase.auth.getUser(),
+      "Discord設定取得のための認証確認がタイムアウトしました。",
+    );
     if (!user) throw new Error("Not authenticated");
 
-    const { data: dsArray } = await supabase
-      .from("discord_servers")
-      .select("*")
-      .eq("seller_id", user.id)
-      .order("updated_at", { ascending: false })
-      .limit(1);
+    const { data: dsArray } = await withTimeout(
+      supabase
+        .from("discord_servers")
+        .select("*")
+        .eq("seller_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1),
+      "Discord設定の取得がタイムアウトしました。",
+    );
     const ds = dsArray?.[0];
 
     if (!ds) {

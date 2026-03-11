@@ -9,6 +9,7 @@ import { formatCurrency, stripeStatusLabel, StripeConnectStatus } from "@/types"
 import { sellerApi } from "@/services/api";
 import { ErrorBanner } from "@/components/shared";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/async";
 
 export default function SellerDashboard() {
   const [stripeStatus, setStripeStatus] = useState<"not_started" | "pending" | "verified">("not_started");
@@ -31,25 +32,37 @@ export default function SellerDashboard() {
 
   useEffect(() => {
     async function fetchStripeStatus() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setStripeLoading(false);
-        return;
-      }
-      const { data } = await supabase
-        .from("stripe_connected_accounts")
-        .select("charges_enabled, payouts_enabled, details_submitted")
-        .eq("seller_id", user.id)
-        .maybeSingle();
+      try {
+        const { data: { user } } = await withTimeout(
+          supabase.auth.getUser(),
+          "Stripe状態の取得がタイムアウトしました。",
+        );
+        if (!user) {
+          setStripeLoading(false);
+          return;
+        }
+        const { data } = await withTimeout(
+          supabase
+            .from("stripe_connected_accounts")
+            .select("charges_enabled, payouts_enabled, details_submitted")
+            .eq("seller_id", user.id)
+            .maybeSingle(),
+          "Stripe状態の取得がタイムアウトしました。",
+        );
 
-      if (data?.charges_enabled && data?.payouts_enabled) {
-        setStripeStatus("verified");
-      } else if (data?.details_submitted) {
-        setStripeStatus("pending");
-      } else {
+        if (data?.charges_enabled && data?.payouts_enabled) {
+          setStripeStatus("verified");
+        } else if (data?.details_submitted) {
+          setStripeStatus("pending");
+        } else {
+          setStripeStatus("not_started");
+        }
+      } catch (error) {
+        console.error("fetchStripeStatus failed:", error);
         setStripeStatus("not_started");
+      } finally {
+        setStripeLoading(false);
       }
-      setStripeLoading(false);
     }
     fetchStripeStatus();
   }, []);

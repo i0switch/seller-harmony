@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth, OnboardingStep } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/async";
 
 const ONBOARDING_STEPS: OnboardingStep[] = ["profile", "stripe", "discord", "complete"];
 
@@ -25,25 +26,28 @@ export function useSellerAuth() {
     try {
       const sellerId = session.user.id;
 
-      const [{ data: profile }, { data: stripeAccounts }, { data: discordServers }] = await Promise.all([
-        supabase
-          .from("seller_profiles")
-          .select("status")
-          .eq("user_id", sellerId)
-          .maybeSingle(),
-        supabase
-          .from("stripe_connected_accounts")
-          .select("charges_enabled, payouts_enabled")
-          .eq("seller_id", sellerId)
-          .order("updated_at", { ascending: false })
-          .limit(1),
-        supabase
-          .from("discord_servers")
-          .select("bot_installed, bot_permission_status")
-          .eq("seller_id", sellerId)
-          .order("updated_at", { ascending: false })
-          .limit(1),
-      ]);
+      const [{ data: profile }, { data: stripeAccounts }, { data: discordServers }] = await withTimeout(
+        Promise.all([
+          supabase
+            .from("seller_profiles")
+            .select("status")
+            .eq("user_id", sellerId)
+            .maybeSingle(),
+          supabase
+            .from("stripe_connected_accounts")
+            .select("charges_enabled, payouts_enabled")
+            .eq("seller_id", sellerId)
+            .order("updated_at", { ascending: false })
+            .limit(1),
+          supabase
+            .from("discord_servers")
+            .select("bot_installed, bot_permission_status")
+            .eq("seller_id", sellerId)
+            .order("updated_at", { ascending: false })
+            .limit(1),
+        ]),
+        "オンボーディング状態の確認がタイムアウトしました。",
+      );
 
       if (profile?.status === "active") {
         setSellerOnboardingStep("complete");
@@ -68,6 +72,9 @@ export function useSellerAuth() {
       }
 
       setSellerOnboardingStep("complete");
+    } catch (error) {
+      console.error("refreshOnboardingStep failed:", error);
+      setSellerOnboardingStep("profile");
     } finally {
       setIsResolvingOnboarding(false);
     }

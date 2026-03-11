@@ -13,6 +13,7 @@ import type {
   RetryJobStatus,
 } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/async";
 
 const DEFAULT_KILL_SWITCHES: KillSwitchState[] = [
   {
@@ -104,15 +105,18 @@ function toPlatformAnnouncement(row: {
 }
 
 async function listTenantsAll(): Promise<PlatformTenant[]> {
-  const [{ data: profiles }, { data: users }, { data: discordServers }, { data: stripeAccounts }, { data: memberships }, { data: plans }, { data: webhooks }] = await Promise.all([
-    supabase.from("seller_profiles").select("user_id, store_name, status, created_at, updated_at"),
-    supabase.from("users").select("id, email"),
-    supabase.from("discord_servers").select("seller_id, guild_name, bot_installed"),
-    supabase.from("stripe_connected_accounts").select("seller_id, details_submitted, charges_enabled, payouts_enabled"),
-    supabase.from("memberships").select("seller_id, plan_id, status"),
-    supabase.from("plans").select("id, seller_id, price"),
-    supabase.from("stripe_webhook_events").select("seller_id, processing_status"),
-  ]);
+  const [{ data: profiles }, { data: users }, { data: discordServers }, { data: stripeAccounts }, { data: memberships }, { data: plans }, { data: webhooks }] = await withTimeout(
+    Promise.all([
+      supabase.from("seller_profiles").select("user_id, store_name, status, created_at, updated_at"),
+      supabase.from("users").select("id, email"),
+      supabase.from("discord_servers").select("seller_id, guild_name, bot_installed"),
+      supabase.from("stripe_connected_accounts").select("seller_id, details_submitted, charges_enabled, payouts_enabled"),
+      supabase.from("memberships").select("seller_id, plan_id, status"),
+      supabase.from("plans").select("id, seller_id, price"),
+      supabase.from("stripe_webhook_events").select("seller_id, processing_status"),
+    ]),
+    "テナント一覧データの取得がタイムアウトしました。",
+  );
 
   const userMap = new Map((users ?? []).map((u) => [u.id, u.email]));
   const discordMap = new Map((discordServers ?? []).map((d) => [d.seller_id, d]));
@@ -164,19 +168,22 @@ async function listTenantsAll(): Promise<PlatformTenant[]> {
 }
 
 async function listAlertsAll(): Promise<PlatformAlert[]> {
-  const [{ data: failedWebhooks }, { data: roleFailures }, { data: profiles }] = await Promise.all([
-    supabase
-      .from("stripe_webhook_events")
-      .select("id, event_type, error_message, processing_status, created_at, seller_id")
-      .order("created_at", { ascending: false })
-      .limit(50),
-    supabase
-      .from("role_assignments")
-      .select("id, error_reason, actual_state, updated_at, membership_id")
-      .order("updated_at", { ascending: false })
-      .limit(50),
-    supabase.from("seller_profiles").select("user_id, store_name"),
-  ]);
+  const [{ data: failedWebhooks }, { data: roleFailures }, { data: profiles }] = await withTimeout(
+    Promise.all([
+      supabase
+        .from("stripe_webhook_events")
+        .select("id, event_type, error_message, processing_status, created_at, seller_id")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("role_assignments")
+        .select("id, error_reason, actual_state, updated_at, membership_id")
+        .order("updated_at", { ascending: false })
+        .limit(50),
+      supabase.from("seller_profiles").select("user_id, store_name"),
+    ]),
+    "アラートデータの取得がタイムアウトしました。",
+  );
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.user_id, p.store_name]));
 
@@ -315,8 +322,9 @@ export const platformApi: IPlatformApi = {
         page_size: pageSize,
         total_count: filtered.length,
       };
-    } catch {
-      return { items: [], page: params.page ?? 1, page_size: params.pageSize ?? 10, total_count: 0 };
+    } catch (error) {
+      console.error("getTenants failed:", error);
+      throw error instanceof Error ? error : new Error("テナント一覧の取得に失敗しました。");
     }
   },
 
