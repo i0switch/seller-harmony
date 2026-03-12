@@ -275,14 +275,27 @@ export const sellerApi: ISellerApi = {
 
     // Resolve discord_server_id from guildId
     let discord_server_id: string | null = null;
+    let defaultRoleId: string | null = null;
     if (planData.discordGuildId) {
       const { data: ds } = await supabase
         .from("discord_servers")
-        .select("id")
+        .select("id, default_role_id")
         .eq("seller_id", user.id)
         .eq("guild_id", planData.discordGuildId)
         .maybeSingle();
       discord_server_id = ds?.id ?? null;
+      defaultRoleId = ds?.default_role_id ?? null;
+    } else {
+      const { data: servers } = await supabase
+        .from("discord_servers")
+        .select("id, default_role_id")
+        .eq("seller_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+      const fallbackServer = servers?.[0];
+      discord_server_id = fallbackServer?.id ?? null;
+      defaultRoleId = fallbackServer?.default_role_id ?? null;
     }
 
     const row = {
@@ -293,7 +306,7 @@ export const sellerApi: ISellerApi = {
       currency: planData.currency ?? "jpy",
       interval: toInterval(planData.planType),
       discord_server_id,
-      discord_role_id: planData.discordRoleId ?? null,
+      discord_role_id: planData.discordRoleId || defaultRoleId || null,
       is_public: planData.status === "published",
       // BUG-H04: Distinguish "stopped" from "draft" via deleted_at
       deleted_at: planData.status === "stopped" ? new Date().toISOString() : null,

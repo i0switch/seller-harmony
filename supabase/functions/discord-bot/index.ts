@@ -303,20 +303,16 @@ Deno.serve(async (req: Request) => {
         .eq('id', membership.plan_id)
         .maybeSingle();
 
-      if (!plan?.discord_role_id) {
-        return new Response(
-          JSON.stringify({ status: 'skipped', reason: 'discord_role_not_configured' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       let guildId = '';
+      let targetRoleId = plan?.discord_role_id ?? '';
+      let fallbackServer: { guild_id?: string | null; default_role_id?: string | null } | null = null;
       if (plan.discord_server_id) {
         const { data: serverById } = await supabaseAdmin
           .from('discord_servers')
-          .select('guild_id')
+          .select('guild_id, default_role_id')
           .eq('id', plan.discord_server_id)
           .maybeSingle();
+        fallbackServer = serverById;
         guildId = serverById?.guild_id ?? '';
       }
 
@@ -325,10 +321,11 @@ Deno.serve(async (req: Request) => {
         // Multiple servers → ambiguous, return error instead of guessing
         const { data: serversBySeller } = await supabaseAdmin
           .from('discord_servers')
-          .select('guild_id')
+          .select('guild_id, default_role_id')
           .eq('seller_id', plan.seller_id);
 
         if (serversBySeller && serversBySeller.length === 1) {
+          fallbackServer = serversBySeller[0];
           guildId = serversBySeller[0].guild_id ?? '';
           console.warn(`[discord-bot] Fallback: plan ${plan.id} has no discord_server_id, using seller's only server`);
         } else if (serversBySeller && serversBySeller.length > 1) {
@@ -338,6 +335,17 @@ Deno.serve(async (req: Request) => {
             corsHeaders,
           );
         }
+      }
+
+      if (!targetRoleId) {
+        targetRoleId = fallbackServer?.default_role_id ?? '';
+      }
+
+      if (!targetRoleId) {
+        return new Response(
+          JSON.stringify({ status: 'skipped', reason: 'discord_role_not_configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       if (!guildId) {
@@ -366,7 +374,7 @@ Deno.serve(async (req: Request) => {
           membership_id: membership.id,
           discord_user_id: identity.discord_user_id,
           guild_id: guildId,
-          role_id: plan.discord_role_id,
+          role_id: targetRoleId,
           actual_state: 'failed',
           error_reason: 'discord_access_token_missing',
         }, { onConflict: 'membership_id' });
@@ -398,7 +406,7 @@ Deno.serve(async (req: Request) => {
           membership_id: membership.id,
           discord_user_id: identity.discord_user_id,
           guild_id: guildId,
-          role_id: plan.discord_role_id,
+          role_id: targetRoleId,
           actual_state: 'failed',
           error_reason: `guild_join_failed:${joinReason}`,
         }, { onConflict: 'membership_id' });
@@ -410,7 +418,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const grantRes = await fetch(
-        `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}/roles/${plan.discord_role_id}`,
+        `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}/roles/${targetRoleId}`,
         {
           method: 'PUT',
           headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
@@ -424,7 +432,7 @@ Deno.serve(async (req: Request) => {
           membership_id: membership.id,
           discord_user_id: identity.discord_user_id,
           guild_id: guildId,
-          role_id: plan.discord_role_id,
+          role_id: targetRoleId,
           actual_state: 'failed',
           error_reason: reason,
         }, { onConflict: 'membership_id' });
@@ -439,7 +447,7 @@ Deno.serve(async (req: Request) => {
         membership_id: membership.id,
         discord_user_id: identity.discord_user_id,
         guild_id: guildId,
-        role_id: plan.discord_role_id,
+        role_id: targetRoleId,
         actual_state: 'granted',
         error_reason: null,
       }, { onConflict: 'membership_id' });

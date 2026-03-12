@@ -434,27 +434,37 @@ async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userI
       .eq('id', planId)
       .single();
 
-    if (!identity?.discord_user_id || !plan?.discord_role_id) return;
+    if (!identity?.discord_user_id) return;
 
     let guildId = '';
+    let targetRoleId = plan?.discord_role_id ?? '';
+    let fallbackServer: { guild_id?: string | null; default_role_id?: string | null } | null = null;
+
     if (plan.discord_server_id) {
       const { data: server } = await supabaseAdmin
         .from('discord_servers')
-        .select('guild_id')
+        .select('guild_id, default_role_id')
         .eq('id', plan.discord_server_id)
         .single();
-      guildId = server?.guild_id;
+      fallbackServer = server;
+      guildId = server?.guild_id ?? '';
     } else {
       // Fallback: use seller's only server if possible
       const { data: servers } = await supabaseAdmin
         .from('discord_servers')
-        .select('guild_id')
+        .select('guild_id, default_role_id')
         .eq('seller_id', sellerId);
       if (servers && servers.length === 1) {
-        guildId = servers[0].guild_id;
+        fallbackServer = servers[0];
+        guildId = servers[0].guild_id ?? '';
       }
     }
 
+    if (!targetRoleId) {
+      targetRoleId = fallbackServer?.default_role_id ?? '';
+    }
+
+    if (!targetRoleId) return;
     if (!guildId) return;
 
     const userAccessToken = await decryptToken(identity?.access_token_encrypted);
@@ -463,7 +473,7 @@ async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userI
         membership_id: membershipId,
         discord_user_id: identity?.discord_user_id ?? null,
         guild_id: guildId,
-        role_id: plan.discord_role_id,
+        role_id: targetRoleId,
         actual_state: 'failed',
         error_reason: 'discord_access_token_missing',
       }, { onConflict: 'membership_id' });
@@ -490,7 +500,7 @@ async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userI
         membership_id: membershipId,
         discord_user_id: identity.discord_user_id,
         guild_id: guildId,
-        role_id: plan.discord_role_id,
+        role_id: targetRoleId,
         actual_state: 'failed',
         error_reason: `guild_join_failed:${joinReason}`,
       }, { onConflict: 'membership_id' });
@@ -498,7 +508,7 @@ async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userI
     }
 
     const res = await fetch(
-      `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}/roles/${plan.discord_role_id}`,
+      `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}/roles/${targetRoleId}`,
       {
         method: 'PUT',
         headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
@@ -512,7 +522,7 @@ async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userI
       membership_id: membershipId,
       discord_user_id: identity.discord_user_id,
       guild_id: guildId,
-      role_id: plan.discord_role_id,
+      role_id: targetRoleId,
       actual_state: status,
       error_reason: reason,
     }, { onConflict: 'membership_id' });
