@@ -26,11 +26,80 @@ function getCorsHeaders(req: Request) {
 }
 
 const DISCORD_BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') || '';
+const DISCORD_TOKEN_ENCRYPTION_KEY = Deno.env.get('DISCORD_TOKEN_ENCRYPTION_KEY') || '';
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
+
+function base64ToBytes(base64: string): Uint8Array {
+  const normalized = base64.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+let tokenEncryptionKeyPromise: Promise<CryptoKey | null> | null = null;
+
+function getTokenEncryptionKey(): Promise<CryptoKey | null> {
+  if (!tokenEncryptionKeyPromise) {
+    tokenEncryptionKeyPromise = (async () => {
+      if (!DISCORD_TOKEN_ENCRYPTION_KEY) {
+        console.warn('[discord-bot] DISCORD_TOKEN_ENCRYPTION_KEY is not set. Auto guild join will be disabled.');
+        return null;
+      }
+
+      try {
+        const keyBytes = base64ToBytes(DISCORD_TOKEN_ENCRYPTION_KEY);
+        if (keyBytes.length !== 32) {
+          console.error('[discord-bot] DISCORD_TOKEN_ENCRYPTION_KEY must be base64-encoded 32 bytes.');
+          return null;
+        }
+
+        return await crypto.subtle.importKey(
+          'raw',
+          keyBytes.buffer as ArrayBuffer,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt']
+        );
+      } catch (error) {
+        console.error('[discord-bot] Failed to import DISCORD_TOKEN_ENCRYPTION_KEY:', error);
+        return null;
+      }
+    })();
+  }
+
+  return tokenEncryptionKeyPromise;
+}
+
+async function decryptToken(cipherText: string | null | undefined): Promise<string | null> {
+  if (!cipherText) return null;
+
+  const key = await getTokenEncryptionKey();
+  if (!key) return null;
+
+  try {
+    const packed = Uint8Array.from(atob(cipherText), (char) => char.charCodeAt(0));
+    const iv = packed.slice(0, 12);
+    const encrypted = packed.slice(12);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encrypted,
+    );
+
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.error('[discord-bot] Failed to decrypt Discord token:', error);
+    return null;
+  }
+}
 
 function jsonResponse(body: Record<string, unknown>, status: number, corsHeaders: HeadersInit) {
   return new Response(JSON.stringify(body), {
@@ -280,7 +349,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: identity } = await supabaseAdmin
         .from('discord_identities')
-        .select('discord_user_id')
+        .select('discord_user_id, access_token_encrypted')
         .eq('user_id', membership.buyer_id)
         .maybeSingle();
 
@@ -288,6 +357,55 @@ Deno.serve(async (req: Request) => {
         return new Response(
           JSON.stringify({ status: 'skipped', reason: 'discord_not_linked' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const userAccessToken = await decryptToken(identity?.access_token_encrypted);
+      if (!userAccessToken) {
+        await supabaseAdmin.from('role_assignments').upsert({
+          membership_id: membership.id,
+          discord_user_id: identity.discord_user_id,
+          guild_id: guildId,
+          role_id: plan.discord_role_id,
+          actual_state: 'failed',
+          error_reason: 'discord_access_token_missing',
+        }, { onConflict: 'membership_id' });
+
+        return new Response(
+          JSON.stringify({ status: 'failed', reason: 'discord_access_token_missing' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const joinRes = await fetch(
+        `https://discord.com/api/v10/guilds/${guildId}/members/${identity.discord_user_id}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            access_token: userAccessToken,
+          }),
+        }
+      );
+
+      if (!joinRes.ok && joinRes.status !== 204 && joinRes.status !== 201) {
+        const joinReason = await joinRes.text();
+
+        await supabaseAdmin.from('role_assignments').upsert({
+          membership_id: membership.id,
+          discord_user_id: identity.discord_user_id,
+          guild_id: guildId,
+          role_id: plan.discord_role_id,
+          actual_state: 'failed',
+          error_reason: `guild_join_failed:${joinReason}`,
+        }, { onConflict: 'membership_id' });
+
+        return new Response(
+          JSON.stringify({ status: 'failed', reason: `guild_join_failed:${joinReason}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
