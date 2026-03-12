@@ -233,6 +233,17 @@ export default function MemberMe() {
       )}
 
       <div className="space-y-2">
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            navigate("/buyer/login");
+          }}
+        >
+          ログアウト
+        </Button>
+
         {STRIPE_BILLING_PORTAL_URL && (
           <Button variant="outline" className="w-full" asChild>
             <a href={STRIPE_BILLING_PORTAL_URL} target="_blank" rel="noopener noreferrer">

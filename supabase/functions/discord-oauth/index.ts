@@ -149,32 +149,6 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // If no code, return Discord authorization URL
-    if (!code && !body.code) {
-      if (!incomingState) {
-        return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Server-side state storage: save state bound to user for callback verification
-      // BUG-09 fix: Use NULL instead of empty string for placeholder discord_user_id
-      await supabaseAdmin.from('discord_identities').upsert({
-        user_id: user.id,
-        discord_user_id: null, // placeholder until OAuth completes (NULL avoids UNIQUE violation)
-        discord_username: '',
-        oauth_state: incomingState,
-        oauth_state_created_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
-
-      const stateParam = `&state=${encodeURIComponent(incomingState)}`;
-      const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(actualRedirectUri)}&response_type=code&scope=identify%20guilds.join${stateParam}`;
-      return new Response(JSON.stringify({ url: discordAuthUrl }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const actualCode = code || body.code;
     const shouldSave = body.save !== false;
 
@@ -220,6 +194,32 @@ Deno.serve(async (req: Request) => {
         .eq('user_id', user.id);
 
       return new Response(JSON.stringify({ success: true, saved: true, activated_count: activatedMemberships?.length || 0 }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // If no code, return Discord authorization URL
+    if (!actualCode) {
+      if (!incomingState) {
+        return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Server-side state storage: save state bound to user for callback verification
+      // BUG-09 fix: Use NULL instead of empty string for placeholder discord_user_id
+      await supabaseAdmin.from('discord_identities').upsert({
+        user_id: user.id,
+        discord_user_id: null, // placeholder until OAuth completes (NULL avoids UNIQUE violation)
+        discord_username: '',
+        oauth_state: incomingState,
+        oauth_state_created_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+      const stateParam = `&state=${encodeURIComponent(incomingState)}`;
+      const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(actualRedirectUri)}&response_type=code&scope=identify%20guilds.join${stateParam}`;
+      return new Response(JSON.stringify({ url: discordAuthUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

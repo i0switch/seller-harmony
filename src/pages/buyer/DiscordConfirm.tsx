@@ -53,6 +53,7 @@ export default function DiscordConfirm() {
       const data = await callDiscordOAuth({
         redirect_uri: `${window.location.origin}/buyer/discord/result`,
         state,
+        save: false,
       }) as { url?: string };
       if (!data?.url) throw new DiscordOAuthError("Discord認証URLの取得に失敗しました。", "OAUTH_URL_MISSING");
 
