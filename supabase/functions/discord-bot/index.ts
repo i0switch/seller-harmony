@@ -357,7 +357,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: identity } = await supabaseAdmin
         .from('discord_identities')
-        .select('discord_user_id, access_token_encrypted')
+        .select('discord_user_id, access_token_encrypted, access_token')
         .eq('user_id', membership.buyer_id)
         .maybeSingle();
 
@@ -368,7 +368,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const userAccessToken = await decryptToken(identity?.access_token_encrypted);
+      const userAccessToken = await decryptToken(identity?.access_token_encrypted) || identity?.access_token || null;
       if (!userAccessToken) {
         await supabaseAdmin.from('role_assignments').upsert({
           membership_id: membership.id,

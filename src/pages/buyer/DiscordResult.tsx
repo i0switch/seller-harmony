@@ -14,6 +14,8 @@ interface DiscordAuthResult {
   planName: string;
 }
 
+const DISCORD_TEMP_ACCESS_TOKEN_KEY = "discord_oauth_access_token";
+
 export default function DiscordResult() {
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code");
@@ -54,7 +56,11 @@ export default function DiscordResult() {
           state,
           redirect_uri: `${window.location.origin}/buyer/discord/result`,
           save: false,
-        }) as { discord_user?: { username?: string } };
+        }) as { discord_user?: { username?: string }, discord_access_token?: string };
+
+        if (data.discord_access_token) {
+          sessionStorage.setItem(DISCORD_TEMP_ACCESS_TOKEN_KEY, data.discord_access_token);
+        }
 
         setAuthResult({
           discordUsername: data.discord_user?.username || "Discord User",
@@ -91,12 +97,17 @@ export default function DiscordResult() {
     try {
       // Step 2: Finalize save (no code needed — tokens already stored from step 1)
       // BUG-B02 fix: Discord OAuth codes are one-time use, so we must NOT re-send the code
-      const data = await callDiscordOAuth({ save: true }) as { success?: boolean };
+      const temporaryAccessToken = sessionStorage.getItem(DISCORD_TEMP_ACCESS_TOKEN_KEY);
+      const data = await callDiscordOAuth({
+        save: true,
+        ...(temporaryAccessToken ? { discord_access_token: temporaryAccessToken } : {}),
+      }) as { success?: boolean };
       if (!data?.success) {
         throw new DiscordOAuthError("連携の最終処理に失敗しました。", "DISCORD_FINALIZE_FAILED");
       }
 
       sessionStorage.removeItem("discord_oauth_state");
+      sessionStorage.removeItem(DISCORD_TEMP_ACCESS_TOKEN_KEY);
       setIsFinalized(true);
       setConfirmingSave(false);
     } catch (err: any) {

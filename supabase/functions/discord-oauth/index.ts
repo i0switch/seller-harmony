@@ -181,9 +181,13 @@ Deno.serve(async (req: Request) => {
     // must NOT re-exchange the code. Instead, tokens are stored on step 1
     // and step 2 only activates memberships using the stored identity.
     if (shouldSave && !actualCode) {
+      const temporaryDiscordAccessToken = typeof body.discord_access_token === 'string'
+        ? body.discord_access_token
+        : '';
+
       const { data: existingIdentity } = await supabaseAdmin
         .from('discord_identities')
-        .select('discord_user_id, discord_username')
+        .select('discord_user_id, discord_username, access_token_encrypted, access_token')
         .eq('user_id', user.id)
         .not('discord_user_id', 'is', null)
         .maybeSingle();
@@ -195,7 +199,18 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      // Activate pending_discord memberships
+      const userAccessToken = temporaryDiscordAccessToken
+        || await decryptToken(existingIdentity?.access_token_encrypted)
+        || existingIdentity?.access_token
+        || null;
+
+      const activateStatuses = ['pending_discord', 'active', 'grace_period', 'cancel_scheduled'] as const;
+      const { data: membershipsToGrant } = await supabaseAdmin
+        .from('memberships')
+        .eq('buyer_id', user.id)
+        .in('status', activateStatuses as unknown as string[])
+        .select();
+
       const { data: activatedMemberships } = await supabaseAdmin
         .from('memberships')
         .update({ status: 'active' })
@@ -203,10 +218,9 @@ Deno.serve(async (req: Request) => {
         .eq('status', 'pending_discord')
         .select();
 
-      // CAND-P1-02: Auto-grant roles for all activated memberships (2-step flow)
-      if (activatedMemberships && activatedMemberships.length > 0) {
-        for (const membership of activatedMemberships) {
-          await assignDiscordRole(supabaseAdmin, membership.id, user.id, membership.seller_id, membership.plan_id);
+      if (membershipsToGrant && membershipsToGrant.length > 0 && userAccessToken) {
+        for (const membership of membershipsToGrant) {
+          await assignDiscordRole(supabaseAdmin, membership.id, user.id, membership.seller_id, membership.plan_id, userAccessToken);
         }
       }
 
@@ -339,8 +353,8 @@ Deno.serve(async (req: Request) => {
         user_id: user.id,
         discord_user_id: meData.id,
         discord_username: `${meData.username}${meData.discriminator !== '0' ? `#${meData.discriminator}` : ''}`,
-        access_token: null,
-        refresh_token: null,
+        access_token: accessTokenEncrypted ? null : (tokenData.access_token ?? null),
+        refresh_token: refreshTokenEncrypted ? null : (tokenData.refresh_token ?? null),
         access_token_encrypted: accessTokenEncrypted,
         refresh_token_encrypted: refreshTokenEncrypted,
         token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
@@ -394,6 +408,7 @@ Deno.serve(async (req: Request) => {
         discriminator: meData.discriminator,
         avatar: meData.avatar
       },
+      discord_access_token: tokenData.access_token,
       saved: shouldSave
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -417,14 +432,14 @@ Deno.serve(async (req: Request) => {
 /**
  * CAND-P1-02: Assign a Discord role to a buyer and record the result in role_assignments.
  */
-async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userId: string, sellerId: string, planId: string) {
+async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userId: string, sellerId: string, planId: string, providedAccessToken?: string | null) {
   const DISCORD_BOT_TOKEN = Deno.env.get('DISCORD_BOT_TOKEN') || '';
   if (!DISCORD_BOT_TOKEN) return;
 
   try {
     const { data: identity } = await supabaseAdmin
       .from('discord_identities')
-      .select('discord_user_id, access_token_encrypted')
+      .select('discord_user_id, access_token_encrypted, access_token')
       .eq('user_id', userId)
       .single();
 
@@ -467,7 +482,7 @@ async function assignDiscordRole(supabaseAdmin: any, membershipId: string, userI
     if (!targetRoleId) return;
     if (!guildId) return;
 
-    const userAccessToken = await decryptToken(identity?.access_token_encrypted);
+    const userAccessToken = providedAccessToken || await decryptToken(identity?.access_token_encrypted) || identity?.access_token || null;
     if (!userAccessToken) {
       await supabaseAdmin.from('role_assignments').upsert({
         membership_id: membershipId,
