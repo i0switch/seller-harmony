@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
+import { callDiscordOAuth, DiscordOAuthError } from "@/lib/discordOAuth";
 
 interface DiscordAuthResult {
   discordUsername: string;
@@ -23,6 +24,7 @@ export default function DiscordResult() {
   const [errorMessage, setErrorMessage] = useState("");
   const [confirmingSave, setConfirmingSave] = useState(false);
   const [isFinalized, setIsFinalized] = useState(false);
+  const [errorCode, setErrorCode] = useState("OAUTH_FAILED");
 
   useEffect(() => {
     if (errorParam) {
@@ -47,17 +49,12 @@ export default function DiscordResult() {
     const fetchUserInfo = async () => {
       try {
         // Step 1: Fetch user info without saving (save: false)
-        const { data, error } = await supabase.functions.invoke('discord-oauth', {
-          body: { code, state, redirect_uri: `${window.location.origin}/buyer/discord/result`, save: false }
-        });
-
-        if (error || !data) throw new Error(error?.message || "Function error");
-
-        if (data.error) {
-          const err = new Error(data.error);
-          (err as any).code = data.code;
-          throw err;
-        }
+        const data = await callDiscordOAuth({
+          code,
+          state,
+          redirect_uri: `${window.location.origin}/buyer/discord/result`,
+          save: false,
+        }) as { discord_user?: { username?: string } };
 
         setAuthResult({
           discordUsername: data.discord_user?.username || "Discord User",
@@ -68,11 +65,17 @@ export default function DiscordResult() {
         setStatus("success"); // We'll use a local state to distinguish between "Confirming" and "Finalized"
       } catch (err: any) {
         console.error("OAuth exchange failed:", err);
+        if (err instanceof DiscordOAuthError) {
+          setErrorCode(err.code);
+        }
         if (err.code === 'DISCORD_ALREADY_LINKED') {
           setErrorMessage(err.message || "このDiscordアカウントは、すでに別のユーザーアカウントに連携されています。");
           setStatus("error");
           // Store the specific error code to show specialized UI
           setAuthResult({ code: 'DISCORD_ALREADY_LINKED' } as any);
+        } else if (err.code === 'BUYER_LOGIN_REQUIRED' || err.code === 'OAUTH_STATE_MISMATCH' || err.code === 'OAUTH_STATE_REQUIRED' || err.code === 'OAUTH_STATE_EXPIRED') {
+          setErrorMessage(err.message || "購入したアカウントでログインし直して、もう一度Discord連携をやり直してください。");
+          setStatus("error");
         } else {
           setErrorMessage(err.message || "Discord情報の取得に失敗しました。");
           setStatus("error");
@@ -88,14 +91,9 @@ export default function DiscordResult() {
     try {
       // Step 2: Finalize save (no code needed — tokens already stored from step 1)
       // BUG-B02 fix: Discord OAuth codes are one-time use, so we must NOT re-send the code
-      const { data, error } = await supabase.functions.invoke('discord-oauth', {
-        body: { save: true }
-      });
-
-      if (error || !data?.success) {
-        const err = new Error(error?.message || data?.error || "Finalize failed");
-        (err as any).code = data?.code;
-        throw err;
+      const data = await callDiscordOAuth({ save: true }) as { success?: boolean };
+      if (!data?.success) {
+        throw new DiscordOAuthError("連携の最終処理に失敗しました。", "DISCORD_FINALIZE_FAILED");
       }
 
       sessionStorage.removeItem("discord_oauth_state");
@@ -103,9 +101,14 @@ export default function DiscordResult() {
       setConfirmingSave(false);
     } catch (err: any) {
       console.error(err);
+      if (err instanceof DiscordOAuthError) {
+        setErrorCode(err.code);
+      }
       if (err.code === 'DISCORD_ALREADY_LINKED') {
         setErrorMessage(err.message || "このDiscordアカウントは、すでに別のユーザーアカウントに連携されています。");
         setAuthResult({ code: 'DISCORD_ALREADY_LINKED' } as any);
+      } else if (err.code === 'BUYER_LOGIN_REQUIRED' || err.code === 'OAUTH_STATE_MISMATCH' || err.code === 'OAUTH_STATE_REQUIRED' || err.code === 'OAUTH_STATE_EXPIRED') {
+        setErrorMessage(err.message || "購入したアカウントでログインし直して、もう一度Discord連携をやり直してください。");
       } else {
         setErrorMessage("連携の最終処理に失敗しました。");
       }
@@ -248,6 +251,23 @@ export default function DiscordResult() {
             <Link to="/auth">別のアカウントでログインし直す</Link>
           </Button>
         </div>
+      ) : (errorCode === 'BUYER_LOGIN_REQUIRED' || errorCode === 'OAUTH_STATE_MISMATCH' || errorCode === 'OAUTH_STATE_REQUIRED' || errorCode === 'OAUTH_STATE_EXPIRED') ? (
+        <div className="glass-card border-accent/20 rounded-xl p-5 space-y-3 bg-accent/5">
+          <h2 className="text-sm font-semibold flex items-center gap-2 text-accent">
+            <RotateCcw className="h-4 w-4" /> まず確認してほしいこと
+          </h2>
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>購入した buyer アカウントでログインした状態が切れているか、連携開始セッションが途中で変わっています。</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs">
+              <li>購入した buyer アカウントでログインし直す</li>
+              <li>別タブに移らず、そのまま Discord 連携をやり直す</li>
+              <li>seller アカウントでログインしたままになっていないか確認する</li>
+            </ul>
+          </div>
+          <Button variant="outline" size="sm" asChild className="w-full mt-2">
+            <Link to="/buyer/login?returnTo=/buyer/discord/confirm">購入したアカウントでログインし直す</Link>
+          </Button>
+        </div>
       ) : (
         <div className="glass-card rounded-xl p-5 space-y-3">
           <h2 className="text-sm font-semibold">考えられる原因</h2>
@@ -262,7 +282,7 @@ export default function DiscordResult() {
       <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 px-1">
         <span>エラーコード:</span>
         <Badge variant="outline" className="font-mono text-xs">
-          {isLinkedError ? 'DISCORD_ALREADY_LINKED' : 'OAUTH_FAILED'}
+          {isLinkedError ? 'DISCORD_ALREADY_LINKED' : errorCode}
         </Badge>
       </div>
 

@@ -105,7 +105,7 @@ Deno.serve(async (req: Request) => {
     // Auth validation
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: '購入したアカウントでログインし直してから、Discord連携をやり直してください。', code: 'BUYER_LOGIN_REQUIRED' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -137,7 +137,7 @@ Deno.serve(async (req: Request) => {
     // Validate redirect_uri against allowlist
     const isRedirectAllowed = ALLOWED_REDIRECT_URIS.includes(actualRedirectUri);
     if (!isRedirectAllowed) {
-      return new Response(JSON.stringify({ error: 'Invalid redirect_uri' }), {
+      return new Response(JSON.stringify({ error: 'OAuth redirect_uri が許可リストにありません。', code: 'INVALID_REDIRECT_URI' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -152,7 +152,10 @@ Deno.serve(async (req: Request) => {
     // If no code, return Discord authorization URL
     if (!code && !body.code) {
       if (!state) {
-        throw new Error("State parameter is required for security.");
+        return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Server-side state storage: save state bound to user for callback verification
@@ -189,7 +192,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (!existingIdentity?.discord_user_id) {
-        return new Response(JSON.stringify({ error: 'Discord連携情報が見つかりません。もう一度連携をやり直してください。' }), {
+        return new Response(JSON.stringify({ error: 'Discord連携情報が見つかりません。もう一度Discord連携をやり直してください。', code: 'DISCORD_LINK_SESSION_MISSING' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -223,7 +226,10 @@ Deno.serve(async (req: Request) => {
 
     // ── Code exchange path: requires state verification ──
     if (!state) {
-      throw new Error("State parameter is required for callback validation.");
+      return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。購入したアカウントでログインしたまま、Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Server-side state verification: compare submitted state with DB-stored state
@@ -234,7 +240,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (!storedIdentity?.oauth_state || storedIdentity.oauth_state !== state) {
-      return new Response(JSON.stringify({ error: 'OAuth state mismatch — possible CSRF attack' }), {
+      return new Response(JSON.stringify({ error: '購入したアカウントでログインした状態と連携開始セッションが一致しません。購入したアカウントでログインし直して、最初からDiscord連携をやり直してください。', code: 'OAUTH_STATE_MISMATCH' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -244,7 +250,7 @@ Deno.serve(async (req: Request) => {
     if (storedIdentity.oauth_state_created_at) {
       const stateAge = Date.now() - new Date(storedIdentity.oauth_state_created_at).getTime();
       if (stateAge > 10 * 60 * 1000) {
-        return new Response(JSON.stringify({ error: 'OAuth state expired' }), {
+        return new Response(JSON.stringify({ error: 'Discord連携の有効時間が切れました。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_EXPIRED' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -266,7 +272,14 @@ Deno.serve(async (req: Request) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.access_token) {
-      throw new Error('Failed to exchange Discord authorization code: ' + (tokenData.error_description || tokenData.error || 'Unknown error'));
+      return new Response(JSON.stringify({
+        error: 'Discord認証コードの交換に失敗しました。もう一度Discord連携をやり直してください。',
+        code: 'DISCORD_CODE_EXCHANGE_FAILED',
+        detail: tokenData.error_description || tokenData.error || 'Unknown error',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Get Discord user info
@@ -277,7 +290,10 @@ Deno.serve(async (req: Request) => {
 
     // BUG-09 fix: Validate discord_user_id is not empty to prevent UNIQUE constraint violation
     if (!meData.id || String(meData.id).trim() === '') {
-      throw new Error('Discord API returned an empty user ID. Please try again.');
+      return new Response(JSON.stringify({ error: 'Discordアカウント情報の取得に失敗しました。もう一度お試しください。', code: 'DISCORD_PROFILE_FETCH_FAILED' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // BUG-B02 fix: Always save tokens after code exchange (code is one-time use)

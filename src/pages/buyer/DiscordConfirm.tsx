@@ -4,11 +4,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, AlertTriangle, RotateCcw, User, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { callDiscordOAuth, DiscordOAuthError } from "@/lib/discordOAuth";
 
 export default function DiscordConfirm() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [discordUser, setDiscordUser] = useState<{ username: string; avatar: string; id: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const maskDiscordId = (value: string) => {
     if (!value) return "";
@@ -43,19 +45,25 @@ export default function DiscordConfirm() {
 
   const handleConfirm = async () => {
     setIsConfirming(true);
+    setErrorMessage("");
     try {
       const state = crypto.randomUUID();
       sessionStorage.setItem("discord_oauth_state", state);
 
-      const { data, error } = await supabase.functions.invoke('discord-oauth', {
-        body: { redirect_uri: `${window.location.origin}/buyer/discord/result`, state }
-      });
-
-      if (error || !data?.url) throw new Error("Failed to get authorization URL");
+      const data = await callDiscordOAuth({
+        redirect_uri: `${window.location.origin}/buyer/discord/result`,
+        state,
+      }) as { url?: string };
+      if (!data?.url) throw new DiscordOAuthError("Discord認証URLの取得に失敗しました。", "OAUTH_URL_MISSING");
 
       window.location.href = data.url;
     } catch (err) {
       console.error(err);
+      if (err instanceof DiscordOAuthError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage("Discord連携の開始に失敗しました。");
+      }
       setIsConfirming(false);
     }
   };
@@ -108,6 +116,13 @@ export default function DiscordConfirm() {
           {discordUser ? " 普段と違うアカウントの場合は、「別のアカウントで連携する」を選んでください。" : ""}
         </AlertDescription>
       </Alert>
+
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">{errorMessage}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Actions */}
       <div className="space-y-3">
