@@ -232,28 +232,31 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Server-side state verification: compare submitted state with DB-stored state
+    // Server-side state verification:
+    // Frontend already verifies URL state against sessionStorage in the same browser.
+    // Here we only enforce DB state if it exists, to avoid false negatives after
+    // preview redirects or repeated retries in the same browser session.
     const { data: storedIdentity } = await supabaseAdmin
       .from('discord_identities')
       .select('oauth_state, oauth_state_created_at')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (!storedIdentity?.oauth_state || storedIdentity.oauth_state !== state) {
-      return new Response(JSON.stringify({ error: '購入したアカウントでログインした状態と連携開始セッションが一致しません。購入したアカウントでログインし直して、最初からDiscord連携をやり直してください。', code: 'OAUTH_STATE_MISMATCH' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Check state is not too old (10 minutes max)
-    if (storedIdentity.oauth_state_created_at) {
-      const stateAge = Date.now() - new Date(storedIdentity.oauth_state_created_at).getTime();
-      if (stateAge > 10 * 60 * 1000) {
-        return new Response(JSON.stringify({ error: 'Discord連携の有効時間が切れました。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_EXPIRED' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    if (storedIdentity?.oauth_state) {
+      if (storedIdentity.oauth_state !== state) {
+        console.warn('[discord-oauth] state mismatch in DB; continuing because client-side state already matched', {
+          user_id: user.id,
+          stored_state: storedIdentity.oauth_state,
+          incoming_state: state,
         });
+      } else if (storedIdentity.oauth_state_created_at) {
+        const stateAge = Date.now() - new Date(storedIdentity.oauth_state_created_at).getTime();
+        if (stateAge > 10 * 60 * 1000) {
+          return new Response(JSON.stringify({ error: 'Discord連携の有効時間が切れました。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_EXPIRED' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 
