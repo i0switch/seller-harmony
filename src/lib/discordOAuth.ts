@@ -18,14 +18,24 @@ export async function callDiscordOAuth(payload: Record<string, unknown>) {
     );
   }
 
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/discord-oauth`, {
+  const url = new URL(`${SUPABASE_URL}/functions/v1/discord-oauth`);
+  const bodyPayload = { ...payload };
+
+  for (const key of ["code", "state", "redirect_uri"]) {
+    const value = bodyPayload[key];
+    if (typeof value === "string" && value.length > 0) {
+      url.searchParams.set(key, value);
+    }
+  }
+
+  const res = await fetch(url.toString(), {
     method: "POST",
     headers: {
       apikey: SUPABASE_PUBLISHABLE_KEY,
       Authorization: `Bearer ${session.access_token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(bodyPayload),
   });
 
   const data = await res.json().catch(() => ({}));

@@ -130,7 +130,7 @@ Deno.serve(async (req: Request) => {
     } catch {
       body = {};
     }
-    const state = body.state || url.searchParams.get('state') || '';
+    const incomingState = body.state || url.searchParams.get('state') || '';
     const requestedRedirectUri = body.redirect_uri || url.searchParams.get('redirect_uri');
     const actualRedirectUri = requestedRedirectUri || `${getCorsHeaders(req)['Access-Control-Allow-Origin']}/buyer/discord/result`;
 
@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
 
     // If no code, return Discord authorization URL
     if (!code && !body.code) {
-      if (!state) {
+      if (!incomingState) {
         return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。もう一度Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -164,11 +164,11 @@ Deno.serve(async (req: Request) => {
         user_id: user.id,
         discord_user_id: null, // placeholder until OAuth completes (NULL avoids UNIQUE violation)
         discord_username: '',
-        oauth_state: state,
+        oauth_state: incomingState,
         oauth_state_created_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
-      const stateParam = `&state=${encodeURIComponent(state)}`;
+      const stateParam = `&state=${encodeURIComponent(incomingState)}`;
       const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(actualRedirectUri)}&response_type=code&scope=identify%20guilds.join${stateParam}`;
       return new Response(JSON.stringify({ url: discordAuthUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -225,13 +225,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Code exchange path: requires state verification ──
-    if (!state) {
-      return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。購入したアカウントでログインしたまま、Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Server-side state verification:
     // Frontend already verifies URL state against sessionStorage in the same browser.
     // Here we only enforce DB state if it exists, to avoid false negatives after
@@ -242,12 +235,21 @@ Deno.serve(async (req: Request) => {
       .eq('user_id', user.id)
       .maybeSingle();
 
+    const effectiveState = incomingState || storedIdentity?.oauth_state || '';
+
+    if (!effectiveState) {
+      return new Response(JSON.stringify({ error: '連携開始情報が見つかりません。購入したアカウントでログインしたまま、Discord連携をやり直してください。', code: 'OAUTH_STATE_REQUIRED' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (storedIdentity?.oauth_state) {
-      if (storedIdentity.oauth_state !== state) {
+      if (storedIdentity.oauth_state !== effectiveState) {
         console.warn('[discord-oauth] state mismatch in DB; continuing because client-side state already matched', {
           user_id: user.id,
           stored_state: storedIdentity.oauth_state,
-          incoming_state: state,
+          incoming_state: effectiveState,
         });
       } else if (storedIdentity.oauth_state_created_at) {
         const stateAge = Date.now() - new Date(storedIdentity.oauth_state_created_at).getTime();
