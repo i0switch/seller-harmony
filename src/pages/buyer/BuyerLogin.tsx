@@ -61,6 +61,23 @@ export default function BuyerLogin() {
             const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
             if (signInError) throw signInError;
 
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("buyer_auth_user_missing");
+
+            const { data: roleRow, error: roleError } = await supabase
+                .from("users")
+                .select("role")
+                .eq("id", user.id)
+                .single();
+
+            if (roleError) throw roleError;
+
+            if (roleRow?.role !== "buyer" && roleRow?.role !== "platform_admin") {
+                await supabase.auth.signOut();
+                setError("このアカウントは購入者ページでは使えないよ。購入者アカウントでログインして。");
+                return;
+            }
+
             navigate(returnTo);
         } catch (err: unknown) {
             setError(sanitizeAuthError(err));
